@@ -5,6 +5,7 @@ void main() {
   testWidgets('starts the Ayyam application', (tester) async {
     await tester.pumpWidget(const MainApp());
 
-    expect(find.text('Hello World!'), findsOneWidget);
+    expect(find.text('Make each\nday count.'), findsOneWidget);
+    expect(find.text('Begin'), findsOneWidget);
   });
 }

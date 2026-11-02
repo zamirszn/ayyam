@@ -1,5 +1,5 @@
 name: ayyam
-description: "A new Flutter project."
+description: A calm, private companion for dua and prayer reflection.
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -9,6 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_riverpod: ^3.4.3
+  flutter_secure_storage: ^11.2.0
+  motor: ^1.1.0
+  shared_preferences: ^2.5.6
 
 dev_dependencies:
   flutter_test:
@@ -16,4 +20,10 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 
 flutter:
-  uses-material-design: true
+  fonts:
+    - family: InstrumentSans
+      fonts:
+        - asset: assets/fonts/instrument_sans/InstrumentSans-Variable.ttf
+    - family: SpaceMono
+      fonts:
+        - asset: assets/fonts/space_mono/SpaceMono-Regular.ttf

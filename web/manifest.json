@@ -1,11 +1,11 @@
 {
-    "name": "ayyam",
-    "short_name": "ayyam",
+    "name": "Ayyam",
+    "short_name": "Ayyam",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#08090B",
+    "theme_color": "#08090B",
+    "description": "A calm, private companion for dua and prayer reflection.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
