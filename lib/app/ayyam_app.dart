@@ -1,9 +1,9 @@
 import 'package:ayyam/design/routes/nocturne_page_route.dart';
 import 'package:ayyam/design/theme/nocturne_theme.dart';
 import 'package:ayyam/design/type/nocturne_type.dart';
-import 'package:ayyam/features/onboarding/presentation/welcome_screen.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:ayyam/app/root_gate.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
 
 class AyyamApp extends StatelessWidget {
   const AyyamApp({super.key});
@@ -20,7 +20,6 @@ class AyyamApp extends StatelessWidget {
       pageRouteBuilder: nocturnePageRoute,
       localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
         DefaultWidgetsLocalizations.delegate,
-        DefaultCupertinoLocalizations.delegate,
       ],
       builder: (context, child) => ScrollConfiguration(
         behavior: const NocturneScrollBehavior(),
@@ -30,7 +29,7 @@ class AyyamApp extends StatelessWidget {
           child: child ?? const SizedBox.shrink(),
         ),
       ),
-      home: const WelcomeScreen(),
+      home: const RootGate(),
     );
   }
 }

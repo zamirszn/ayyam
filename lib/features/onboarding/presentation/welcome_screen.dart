@@ -8,7 +8,9 @@ import 'package:ayyam/design/type/nocturne_type.dart';
 import 'package:flutter/widgets.dart';
 
 class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({super.key});
+  const WelcomeScreen({super.key, required this.onBegin});
+
+  final VoidCallback onBegin;
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +85,7 @@ class WelcomeScreen extends StatelessWidget {
             NocturneButton(
               label: 'Begin',
               trailing: NocturneGlyph.arrowRight,
-              onTap: () {},
+              onTap: onBegin,
             ),
             const SizedBox(height: NocturneSpace.x3),
             Text(

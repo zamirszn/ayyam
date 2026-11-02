@@ -1,7 +1,17 @@
 import 'package:ayyam/design/theme/nocturne_theme.dart';
 import 'package:flutter/widgets.dart';
 
-enum NocturneGlyph { arrowRight, chevronLeft, check, book, dots, bell, lock }
+enum NocturneGlyph {
+  arrowRight,
+  chevronLeft,
+  check,
+  plus,
+  minus,
+  book,
+  dots,
+  bell,
+  lock,
+}
 
 class NocturneIcon extends StatelessWidget {
   const NocturneIcon(
@@ -78,6 +88,16 @@ class _NocturneIconPainter extends CustomPainter {
           ..moveTo(5, 12.5)
           ..lineTo(9.5, 17)
           ..lineTo(19, 7);
+      case NocturneGlyph.plus:
+        path
+          ..moveTo(5, 12)
+          ..lineTo(19, 12)
+          ..moveTo(12, 5)
+          ..lineTo(12, 19);
+      case NocturneGlyph.minus:
+        path
+          ..moveTo(5, 12)
+          ..lineTo(19, 12);
       case NocturneGlyph.book:
         path
           ..moveTo(4, 5)

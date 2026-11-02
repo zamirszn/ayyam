@@ -45,7 +45,8 @@ The user supplies their own Gemini API key. On Android it will be stored in Keys
 
 ## Roadmap
 
-- [ ] Project foundation, theme, onboarding, settings, and feature toggles
+- [x] Project foundation, Nocturne theme, onboarding, secure key storage, and feature toggles
+- [ ] Settings screen and preferences management
 - [ ] Local database, Gemini generation, validation, deduplication, and dua card
 - [ ] Android notifications, exact alarms, reboot recovery, and five-day prefetch
 - [ ] History, collection, source details, and streaks
@@ -54,7 +55,7 @@ The user supplies their own Gemini API key. On Android it will be stored in Keys
 
 ## Current status
 
-Ayyam is in early development. The first milestone focuses on the Flutter foundation and a complete onboarding flow before any generated religious content is shown.
+Ayyam is in early development. The Flutter foundation and conditional onboarding flow are implemented; work is moving next to settings, local data, and validated dua generation. No generated religious content is shown yet.
 
 The complete product requirements are in the [PRD](./PRD%20Dua%20Bucket%20List%20and%20Life%20in%20Dots.md).
 

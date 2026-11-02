@@ -81,3 +81,56 @@ class NocturneButton extends StatelessWidget {
     );
   }
 }
+
+class CircleAction extends StatelessWidget {
+  const CircleAction({
+    super.key,
+    required this.glyph,
+    required this.onTap,
+    required this.semanticLabel,
+    this.foreground,
+    this.background,
+    this.size = 48,
+  });
+
+  final NocturneGlyph glyph;
+  final VoidCallback? onTap;
+  final String semanticLabel;
+  final Color? foreground;
+  final Color? background;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = NocturneScope.of(context);
+    return Opacity(
+      opacity: onTap == null ? 0.45 : 1,
+      child: Pressable(
+        onTap: onTap,
+        semanticLabel: semanticLabel,
+        child: SizedBox.square(
+          dimension: NocturneSpace.minTap,
+          child: Center(
+            child: SizedBox.square(
+              dimension: size.clamp(34, NocturneSpace.minTap),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: background ?? theme.glass,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: theme.lineStrong),
+                ),
+                child: Center(
+                  child: NocturneIcon(
+                    glyph,
+                    size: 19,
+                    color: foreground ?? theme.ink,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
