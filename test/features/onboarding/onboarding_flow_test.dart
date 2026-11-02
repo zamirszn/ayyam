@@ -48,7 +48,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Place the\nfirst dot.'), findsOneWidget);
-    await tester.enterText(find.byType(EditableText).first, '1990-01-01');
+    await tester.tap(find.text('DD / MM / YYYY'));
+    await tester.pumpAndSettle();
+    expect(find.text('DD / MM / YYYY'), findsWidgets);
+    await tester.tap(find.text('Set date'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
@@ -56,11 +60,12 @@ void main() {
     await tester.tap(find.text('Finish setup'));
     await tester.pumpAndSettle();
 
-    expect(find.text('The first day\nis ready.'), findsOneWidget);
+    expect(find.text('A life in\ndays.'), findsOneWidget);
     expect(repository.value.onboardingComplete, isTrue);
     expect(repository.value.duaEnabled, isFalse);
     expect(repository.value.lifeInDotsEnabled, isTrue);
-    expect(repository.value.dateOfBirth, DateTime(1990));
+    expect(repository.value.dateOfBirth, isNotNull);
+    expect(repository.value.dateOfBirth!.isAfter(DateTime.now()), isFalse);
   });
 }
 

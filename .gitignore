@@ -32,6 +32,9 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+/lib/core/database/app_database.g.dart
+/web/drift_worker.js
+/web/sqlite3.wasm
 
 # Symbolication related
 app.*.symbols

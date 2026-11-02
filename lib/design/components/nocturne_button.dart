@@ -34,7 +34,11 @@ class NocturneButton extends StatelessWidget {
       NocturneButtonStyle.signal => (theme.accent, theme.canvas, theme.accent),
       NocturneButtonStyle.ink => (theme.ink, theme.canvas, theme.ink),
       NocturneButtonStyle.glass => (theme.glass, theme.ink, theme.lineStrong),
-      NocturneButtonStyle.danger => (theme.missed, theme.canvas, theme.missed),
+      NocturneButtonStyle.danger => (
+        theme.missed.withValues(alpha: 0.16),
+        theme.missed,
+        theme.missed.withValues(alpha: 0.35),
+      ),
     };
 
     final button = SizedBox(

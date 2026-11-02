@@ -6,6 +6,7 @@ import 'package:ayyam/design/components/glass_card.dart';
 import 'package:ayyam/design/components/nocturne_button.dart';
 import 'package:ayyam/design/components/nocturne_field.dart';
 import 'package:ayyam/design/components/nocturne_icon.dart';
+import 'package:ayyam/design/components/nocturne_picker.dart';
 import 'package:ayyam/design/components/nocturne_scaffold.dart';
 import 'package:ayyam/design/components/nocturne_switch.dart';
 import 'package:ayyam/design/components/pressable.dart';
@@ -38,8 +39,8 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   late int _reminderMinute;
   late String _language;
   late final TextEditingController _apiKeyController;
-  late final TextEditingController _birthDateController;
   late final TextEditingController _missedYearsController;
+  DateTime? _birthDate;
   String? _featureError;
   String? _duaError;
   String? _lifeError;
@@ -66,11 +67,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     _reminderMinute = initial.reminderMinute;
     _language = initial.translationLanguage;
     _apiKeyController = TextEditingController();
-    _birthDateController = TextEditingController(
-      text: initial.dateOfBirth == null
-          ? ''
-          : _formatDate(initial.dateOfBirth!),
-    );
+    _birthDate = initial.dateOfBirth;
     _missedYearsController = TextEditingController(
       text: initial.missedPrayerYears == 0
           ? ''
@@ -88,7 +85,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   @override
   void dispose() {
     _apiKeyController.dispose();
-    _birthDateController.dispose();
     _missedYearsController.dispose();
     super.dispose();
   }
@@ -220,28 +216,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           const SizedBox(height: NocturneSpace.x8),
           _SectionLabel(index: '01', label: 'Reminder time'),
           const SizedBox(height: NocturneSpace.x3),
-          GlassCard(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                _TimeUnit(
-                  label: 'HOUR',
-                  value: _reminderHour.toString().padLeft(2, '0'),
-                  onIncrease: () => _changeHour(1),
-                  onDecrease: () => _changeHour(-1),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  child: Text(':', style: NocturneType.display(theme.faint)),
-                ),
-                _TimeUnit(
-                  label: 'MINUTE',
-                  value: _reminderMinute.toString().padLeft(2, '0'),
-                  onIncrease: () => _changeMinute(5),
-                  onDecrease: () => _changeMinute(-5),
-                ),
-              ],
-            ),
+          NocturnePickerField(
+            label: 'Daily reminder',
+            value: nocturneClockLabel(_reminderHour, _reminderMinute),
+            glyph: NocturneGlyph.clock,
+            onTap: _pickReminderTime,
+            helper: 'Stored as local time on this device.',
           ),
           const SizedBox(height: NocturneSpace.x8),
           _SectionLabel(index: '02', label: 'Translation'),
@@ -279,16 +259,26 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       error: _lifeError,
       child: Column(
         children: <Widget>[
-          NocturneField(
-            controller: _birthDateController,
+          NocturnePickerField(
             label: 'Date of birth',
-            hint: 'YYYY-MM-DD',
-            keyboardType: TextInputType.datetime,
-            textInputAction: TextInputAction.next,
-            error: _lifeError?.contains('birth') == true ? _lifeError : null,
+            value: _birthDate == null
+                ? 'DD / MM / YYYY'
+                : nocturneDateLabel(_birthDate!),
+            glyph: NocturneGlyph.calendar,
+            placeholder: _birthDate == null,
+            onTap: _pickBirthDate,
             helper: 'Used only on this device to place lived and future days.',
-            onChanged: (_) => setState(() => _lifeError = null),
           ),
+          if (_lifeError?.contains('birth') == true) ...<Widget>[
+            const SizedBox(height: NocturneSpace.x2),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _lifeError!,
+                style: NocturneType.caption(NocturneScope.of(context).missed),
+              ),
+            ),
+          ],
           const SizedBox(height: NocturneSpace.x5),
           NocturneField(
             controller: _missedYearsController,
@@ -359,7 +349,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             title: 'Your choices',
             body: [
               if (_duaEnabled)
-                'Dua at ${_reminderHour.toString().padLeft(2, '0')}:${_reminderMinute.toString().padLeft(2, '0')} in $_language',
+                'Dua at ${nocturneClockLabel(_reminderHour, _reminderMinute)} in $_language',
               if (_lifeEnabled) 'Life in Dots stored locally',
             ].join(' · '),
           ),
@@ -408,12 +398,29 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     _goTo(_duaEnabled ? _OnboardingStep.dua : _OnboardingStep.life);
   }
 
-  void _changeHour(int delta) {
-    setState(() => _reminderHour = (_reminderHour + delta) % 24);
+  Future<void> _pickReminderTime() async {
+    final picked = await showNocturneTimePicker(
+      context,
+      hour: _reminderHour,
+      minute: _reminderMinute,
+    );
+    if (!mounted || picked == null) return;
+    setState(() {
+      _reminderHour = picked.hour;
+      _reminderMinute = picked.minute;
+    });
   }
 
-  void _changeMinute(int delta) {
-    setState(() => _reminderMinute = (_reminderMinute + delta) % 60);
+  Future<void> _pickBirthDate() async {
+    final picked = await showNocturneDatePicker(
+      context,
+      initialDate: _birthDate,
+    );
+    if (!mounted || picked == null) return;
+    setState(() {
+      _birthDate = picked;
+      _lifeError = null;
+    });
   }
 
   Future<void> _testKey() async {
@@ -465,7 +472,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   void _continueFromLife() {
-    final birthDate = _parseDate(_birthDateController.text.trim());
+    final birthDate = _birthDate;
     if (birthDate == null || birthDate.isAfter(DateTime.now())) {
       setState(() => _lifeError = 'Enter a valid past date of birth.');
       return;
@@ -496,9 +503,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       if (_duaEnabled) {
         await ref.read(apiKeyVaultProvider).write(_apiKeyController.text);
       }
-      final birthDate = _lifeEnabled
-          ? _parseDate(_birthDateController.text.trim())
-          : null;
+      final birthDate = _lifeEnabled ? _birthDate : null;
       final missedYears = _lifeEnabled
           ? int.tryParse(_missedYearsController.text.trim()) ?? 0
           : 0;
@@ -523,25 +528,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             'Could not save setup. Check device storage and try again.';
       });
     }
-  }
-
-  static DateTime? _parseDate(String value) {
-    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
-    if (match == null) return null;
-    final year = int.parse(match.group(1)!);
-    final month = int.parse(match.group(2)!);
-    final day = int.parse(match.group(3)!);
-    final date = DateTime(year, month, day);
-    if (date.year != year || date.month != month || date.day != day) {
-      return null;
-    }
-    return date;
-  }
-
-  static String _formatDate(DateTime date) {
-    return '${date.year.toString().padLeft(4, '0')}-'
-        '${date.month.toString().padLeft(2, '0')}-'
-        '${date.day.toString().padLeft(2, '0')}';
   }
 
   static int _ageOn(DateTime birthDate, DateTime date) {
@@ -726,47 +712,6 @@ class _SectionLabel extends StatelessWidget {
         ),
         const SizedBox(width: NocturneSpace.x3),
         Text(label.toUpperCase(), style: NocturneType.label(theme.muted)),
-      ],
-    );
-  }
-}
-
-class _TimeUnit extends StatelessWidget {
-  const _TimeUnit({
-    required this.label,
-    required this.value,
-    required this.onIncrease,
-    required this.onDecrease,
-  });
-
-  final String label;
-  final String value;
-  final VoidCallback onIncrease;
-  final VoidCallback onDecrease;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = NocturneScope.of(context);
-    return Column(
-      children: <Widget>[
-        Text(label, style: NocturneType.label(theme.faint)),
-        const SizedBox(height: NocturneSpace.x2),
-        CircleAction(
-          glyph: NocturneGlyph.plus,
-          onTap: onIncrease,
-          semanticLabel: 'Increase $label',
-          size: 38,
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: NocturneSpace.x2),
-          child: Text(value, style: NocturneType.display(theme.ink, size: 40)),
-        ),
-        CircleAction(
-          glyph: NocturneGlyph.minus,
-          onTap: onDecrease,
-          semanticLabel: 'Decrease $label',
-          size: 38,
-        ),
       ],
     );
   }

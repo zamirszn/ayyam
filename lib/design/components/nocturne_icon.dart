@@ -11,6 +11,10 @@ enum NocturneGlyph {
   dots,
   bell,
   lock,
+  settings,
+  close,
+  calendar,
+  clock,
 }
 
 class NocturneIcon extends StatelessWidget {
@@ -142,6 +146,46 @@ class _NocturneIconPainter extends CustomPainter {
           ..quadraticBezierTo(8, 3, 12, 3)
           ..quadraticBezierTo(16, 3, 16, 7.5)
           ..lineTo(16, 10);
+      case NocturneGlyph.settings:
+        path
+          ..moveTo(4, 7)
+          ..lineTo(9, 7)
+          ..moveTo(15, 7)
+          ..lineTo(20, 7)
+          ..moveTo(4, 17)
+          ..lineTo(12, 17)
+          ..moveTo(18, 17)
+          ..lineTo(20, 17);
+        canvas
+          ..drawCircle(const Offset(12, 7), 3, paint)
+          ..drawCircle(const Offset(15, 17), 3, paint);
+        return;
+      case NocturneGlyph.close:
+        path
+          ..moveTo(6, 6)
+          ..lineTo(18, 18)
+          ..moveTo(18, 6)
+          ..lineTo(6, 18);
+      case NocturneGlyph.calendar:
+        path
+          ..addRRect(
+            RRect.fromRectAndRadius(
+              const Rect.fromLTWH(4, 5, 16, 15),
+              const Radius.circular(2),
+            ),
+          )
+          ..moveTo(8, 3)
+          ..lineTo(8, 7)
+          ..moveTo(16, 3)
+          ..lineTo(16, 7)
+          ..moveTo(4, 10)
+          ..lineTo(20, 10);
+      case NocturneGlyph.clock:
+        canvas.drawCircle(const Offset(12, 12), 8, paint);
+        path
+          ..moveTo(12, 7)
+          ..lineTo(12, 12)
+          ..lineTo(15.5, 14);
     }
 
     canvas.drawPath(path, paint);

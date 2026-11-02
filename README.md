@@ -46,8 +46,8 @@ The user supplies their own Gemini API key. On Android it will be stored in Keys
 ## Roadmap
 
 - [x] Project foundation, Nocturne theme, onboarding, secure key storage, and feature toggles
-- [ ] Settings screen and preferences management
-- [ ] Local database, Gemini generation, validation, deduplication, and dua card
+- [x] Settings screen, preferences management, and Nocturne date/time pickers
+- [x] Local database, Gemini generation, validation, deduplication, and dua card
 - [ ] Android notifications, exact alarms, reboot recovery, and five-day prefetch
 - [ ] History, collection, source details, and streaks
 - [ ] Life in Dots visualization, prayer check-in, and personal make-up tracking
@@ -55,7 +55,7 @@ The user supplies their own Gemini API key. On Android it will be stored in Keys
 
 ## Current status
 
-Ayyam is in early development. The Flutter foundation and conditional onboarding flow are implemented; work is moving next to settings, local data, and validated dua generation. No generated religious content is shown yet.
+Ayyam is in early development. The app now stores daily duas locally, requests structured Gemini output, rejects malformed or unsupported sources, enforces Arabic-text deduplication, and renders the sourced dua on Today. Work is moving next to Android reminders and the five-day offline buffer.
 
 The complete product requirements are in the [PRD](./PRD%20Dua%20Bucket%20List%20and%20Life%20in%20Dots.md).
 
@@ -72,8 +72,18 @@ Once the application scaffold is present:
 
 ```sh
 flutter pub get
+dart run build_runner build --delete-conflicting-outputs
 flutter run
 ```
+
+Before running the web target, install Drift's checked runtime assets:
+
+```sh
+bash tool/setup_drift_web.sh
+flutter run -d chrome
+```
+
+Generated Drift bindings and web runtime assets are created in CI and are not committed.
 
 Run the quality checks with:
 
