@@ -58,6 +58,11 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
       - name: Install dependencies
         run: flutter pub get
 
