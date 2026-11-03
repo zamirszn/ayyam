@@ -60,7 +60,24 @@ class DuaReminderCoordinator {
     DateTime? now,
   }) async {
     await _reminders.initialize();
-    if (!preferences.onboardingComplete || !preferences.duaEnabled) {
+    if (!preferences.onboardingComplete) {
+      await _reminders.cancelScheduled();
+      await _reminders.replaceLifeCheckInReminder(
+        enabled: false,
+        hour: preferences.lifeReminderHour,
+        minute: preferences.lifeReminderMinute,
+      );
+      await _workScheduler.cancel();
+      return const DuaReminderSyncResult();
+    }
+
+    await _reminders.replaceLifeCheckInReminder(
+      enabled: preferences.lifeInDotsEnabled && preferences.lifeReminderEnabled,
+      hour: preferences.lifeReminderHour,
+      minute: preferences.lifeReminderMinute,
+    );
+
+    if (!preferences.duaEnabled) {
       await _reminders.cancelScheduled();
       await _workScheduler.cancel();
       return const DuaReminderSyncResult();

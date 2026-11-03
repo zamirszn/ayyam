@@ -36,6 +36,35 @@ void main() {
     expect(result.errors, contains('Hadith grading must be Sahih or Hasan.'));
   });
 
+  test('rejects misleading grading text that merely contains Sahih', () {
+    final result = validator.validate(_hadithCandidate(grading: 'Not Sahih'));
+
+    expect(result.isValid, isFalse);
+    expect(result.errors, contains('Hadith grading must be Sahih or Hasan.'));
+  });
+
+  test('rejects a hadith source without a numbered reference', () {
+    final result = validator.validate(
+      _hadithCandidate(reference: 'Book of supplications'),
+    );
+
+    expect(result.isValid, isFalse);
+    expect(
+      result.errors,
+      contains('Hadith collection and reference are required.'),
+    );
+  });
+
+  test('rejects Quran ayahs beyond the selected surah', () {
+    final result = validator.validate(_quranCandidate(reference: '1:8'));
+
+    expect(result.isValid, isFalse);
+    expect(
+      result.errors,
+      contains('Quran reference is not a valid surah and ayah range.'),
+    );
+  });
+
   test('normalizes tashkeel and spacing before hashing Arabic', () {
     final first = DuaIdentity.idForArabic('رَبِّ زِدْنِي عِلْمًا');
     final second = DuaIdentity.idForArabic('رب زدني علما');
@@ -44,8 +73,8 @@ void main() {
   });
 }
 
-GeneratedDuaCandidate _quranCandidate() {
-  return const GeneratedDuaCandidate(
+GeneratedDuaCandidate _quranCandidate({String reference = '20:114'}) {
+  return GeneratedDuaCandidate(
     arabic: 'رَبِّ زِدْنِي عِلْمًا',
     transliteration: 'Rabbi zidni ilma.',
     translation: 'My Lord, increase me in knowledge.',
@@ -55,8 +84,29 @@ GeneratedDuaCandidate _quranCandidate() {
       DuaSource(
         type: DuaSourceType.quran,
         collection: 'Quran',
-        reference: '20:114',
+        reference: reference,
         grading: 'Quran',
+      ),
+    ],
+  );
+}
+
+GeneratedDuaCandidate _hadithCandidate({
+  String reference = '123',
+  String grading = 'Sahih',
+}) {
+  return GeneratedDuaCandidate(
+    arabic: 'اللَّهُمَّ اهْدِنِي',
+    transliteration: 'Allahumma ihdini.',
+    translation: 'O Allah, guide me.',
+    benefits: 'A request for guidance.',
+    occasion: 'Guidance',
+    sources: <DuaSource>[
+      DuaSource(
+        type: DuaSourceType.hadith,
+        collection: 'Sahih Muslim',
+        reference: reference,
+        grading: grading,
       ),
     ],
   );

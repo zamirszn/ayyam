@@ -45,10 +45,11 @@ class GeminiDuaClient implements DuaGeneratorClient {
     String model = 'gemini-2.5-flash',
   }) => GeminiDuaClient._(client, model);
 
-  GeminiDuaClient._(this._client, this.model);
+  GeminiDuaClient._(this._client, this.preferredModel);
 
   final http.Client _client;
-  final String model;
+  final String preferredModel;
+  String? _resolvedModel;
 
   @override
   Future<GeneratedDuaCandidate> generate({
@@ -66,10 +67,6 @@ class GeminiDuaClient implements DuaGeneratorClient {
       );
     }
 
-    final uri = Uri.https(
-      'generativelanguage.googleapis.com',
-      '/v1beta/models/$model:generateContent',
-    );
     final body = jsonEncode(<String, Object?>{
       'contents': <Object?>[
         <String, Object?>{
@@ -93,27 +90,23 @@ class GeminiDuaClient implements DuaGeneratorClient {
       },
     });
 
-    late http.Response response;
-    try {
-      response = await _client
-          .post(
-            uri,
-            headers: <String, String>{
-              'content-type': 'application/json',
-              'x-goog-api-key': normalizedKey,
-            },
-            body: body,
-          )
-          .timeout(const Duration(seconds: 30));
-    } on TimeoutException {
-      throw const DuaGenerationException(
-        DuaGenerationError.unavailable,
-        'Gemini did not respond in time.',
+    final model = _resolvedModel ?? await _discoverModel(normalizedKey);
+    _resolvedModel = model;
+    var response = await _postGeneration(
+      apiKey: normalizedKey,
+      model: model,
+      body: body,
+    );
+    if (response.statusCode == 404) {
+      final fallback = await _discoverModel(
+        normalizedKey,
+        excluded: <String>{model},
       );
-    } on http.ClientException {
-      throw const DuaGenerationException(
-        DuaGenerationError.unavailable,
-        'Gemini could not be reached.',
+      _resolvedModel = fallback;
+      response = await _postGeneration(
+        apiKey: normalizedKey,
+        model: fallback,
+        body: body,
       );
     }
 
@@ -160,6 +153,140 @@ class GeminiDuaClient implements DuaGeneratorClient {
         'Gemini returned malformed structured content: ${error.message}',
       );
     }
+  }
+
+  Future<http.Response> _postGeneration({
+    required String apiKey,
+    required String model,
+    required String body,
+  }) async {
+    final uri = Uri.https(
+      'generativelanguage.googleapis.com',
+      '/v1beta/models/$model:generateContent',
+    );
+    try {
+      return await _client
+          .post(
+            uri,
+            headers: <String, String>{
+              'content-type': 'application/json',
+              'x-goog-api-key': apiKey,
+            },
+            body: body,
+          )
+          .timeout(const Duration(seconds: 30));
+    } on TimeoutException {
+      throw const DuaGenerationException(
+        DuaGenerationError.unavailable,
+        'Gemini did not respond in time.',
+      );
+    } on http.ClientException {
+      throw const DuaGenerationException(
+        DuaGenerationError.unavailable,
+        'Gemini could not be reached.',
+      );
+    }
+  }
+
+  Future<String> _discoverModel(
+    String apiKey, {
+    Set<String> excluded = const <String>{},
+  }) async {
+    late http.Response response;
+    try {
+      response = await _client
+          .get(
+            Uri.https(
+              'generativelanguage.googleapis.com',
+              '/v1beta/models',
+              const <String, String>{'pageSize': '1000'},
+            ),
+            headers: <String, String>{'x-goog-api-key': apiKey},
+          )
+          .timeout(const Duration(seconds: 15));
+    } on TimeoutException {
+      throw const DuaGenerationException(
+        DuaGenerationError.unavailable,
+        'Gemini model discovery did not respond in time.',
+      );
+    } on http.ClientException {
+      throw const DuaGenerationException(
+        DuaGenerationError.unavailable,
+        'Gemini model discovery could not be reached.',
+      );
+    }
+    if (response.statusCode != 200) throw _httpFailure(response);
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<Object?, Object?>) {
+        throw const FormatException('Model list must be an object.');
+      }
+      final rawModels = decoded['models'];
+      if (rawModels is! List<Object?>) {
+        throw const FormatException('Model list is missing.');
+      }
+      final available = <String>[];
+      for (final rawModel in rawModels) {
+        if (rawModel is! Map<Object?, Object?>) continue;
+        final name = rawModel['name'];
+        final methods = rawModel['supportedGenerationMethods'];
+        if (name is! String || methods is! List<Object?>) continue;
+        if (!methods.whereType<String>().contains('generateContent')) continue;
+        final normalized = name.startsWith('models/')
+            ? name.substring('models/'.length)
+            : name;
+        if (!excluded.contains(normalized) && _modelScore(normalized) >= 0) {
+          available.add(normalized);
+        }
+      }
+      if (available.contains(preferredModel)) return preferredModel;
+      if (available.isEmpty) {
+        throw const DuaGenerationException(
+          DuaGenerationError.unavailable,
+          'No Gemini text-generation model is available for this API key.',
+        );
+      }
+      available.sort((a, b) => _modelScore(b).compareTo(_modelScore(a)));
+      return available.first;
+    } on DuaGenerationException {
+      rethrow;
+    } on FormatException catch (error) {
+      throw DuaGenerationException(
+        DuaGenerationError.malformed,
+        'Gemini returned a malformed model list: ${error.message}',
+      );
+    }
+  }
+
+  int _modelScore(String name) {
+    final normalized = name.toLowerCase();
+    if (!normalized.startsWith('gemini-')) return -1;
+    if (<String>[
+      'embedding',
+      'imagen',
+      'image',
+      'veo',
+      'audio',
+      'tts',
+      'live',
+      'robotics',
+      'computer-use',
+    ].any(normalized.contains)) {
+      return -1;
+    }
+    var score = 0;
+    if (normalized.contains('flash')) score += 100;
+    if (normalized.contains('pro')) score += 50;
+    if (normalized.contains('latest')) score += 20;
+    if (normalized.contains('lite')) score -= 10;
+    if (normalized.contains('preview')) score -= 15;
+    if (normalized.contains('exp')) score -= 25;
+    final version = RegExp(r'gemini-(\d+)(?:\.(\d+))?').firstMatch(normalized);
+    if (version != null) {
+      score += int.parse(version.group(1)!) * 10;
+      score += int.tryParse(version.group(2) ?? '') ?? 0;
+    }
+    return score;
   }
 
   DuaGenerationException _httpFailure(http.Response response) {

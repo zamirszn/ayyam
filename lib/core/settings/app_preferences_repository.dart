@@ -22,6 +22,10 @@ class LocalAppPreferencesRepository implements AppPreferencesRepository {
       'ayyam.settings.translationLanguage';
   static const String _dateOfBirth = 'ayyam.settings.dateOfBirth';
   static const String _missedPrayerYears = 'ayyam.settings.missedPrayerYears';
+  static const String _lifeReminderEnabled =
+      'ayyam.settings.lifeReminderEnabled';
+  static const String _lifeReminderHour = 'ayyam.settings.lifeReminderHour';
+  static const String _lifeReminderMinute = 'ayyam.settings.lifeReminderMinute';
 
   @override
   Future<AppPreferences> load() async {
@@ -34,6 +38,9 @@ class LocalAppPreferencesRepository implements AppPreferencesRepository {
       _preferences.getString(_translationLanguage),
       _preferences.getString(_dateOfBirth),
       _preferences.getInt(_missedPrayerYears),
+      _preferences.getBool(_lifeReminderEnabled),
+      _preferences.getInt(_lifeReminderHour),
+      _preferences.getInt(_lifeReminderMinute),
     ]);
     final dateValue = values[6] as String?;
 
@@ -51,6 +58,12 @@ class LocalAppPreferencesRepository implements AppPreferencesRepository {
       dateOfBirth: dateValue == null ? null : DateTime.tryParse(dateValue),
       missedPrayerYears:
           values[7] as int? ?? AppPreferences.defaults.missedPrayerYears,
+      lifeReminderEnabled:
+          values[8] as bool? ?? AppPreferences.defaults.lifeReminderEnabled,
+      lifeReminderHour:
+          values[9] as int? ?? AppPreferences.defaults.lifeReminderHour,
+      lifeReminderMinute:
+          values[10] as int? ?? AppPreferences.defaults.lifeReminderMinute,
     );
   }
 
@@ -67,6 +80,12 @@ class LocalAppPreferencesRepository implements AppPreferencesRepository {
         preferences.translationLanguage,
       ),
       _preferences.setInt(_missedPrayerYears, preferences.missedPrayerYears),
+      _preferences.setBool(
+        _lifeReminderEnabled,
+        preferences.lifeReminderEnabled,
+      ),
+      _preferences.setInt(_lifeReminderHour, preferences.lifeReminderHour),
+      _preferences.setInt(_lifeReminderMinute, preferences.lifeReminderMinute),
       if (preferences.dateOfBirth case final date?)
         _preferences.setString(_dateOfBirth, date.toIso8601String())
       else

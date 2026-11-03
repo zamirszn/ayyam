@@ -11,6 +11,9 @@ class AppPreferences {
     required this.translationLanguage,
     required this.dateOfBirth,
     required this.missedPrayerYears,
+    this.lifeReminderEnabled = false,
+    this.lifeReminderHour = 20,
+    this.lifeReminderMinute = 0,
   });
 
   final bool onboardingComplete;
@@ -21,6 +24,9 @@ class AppPreferences {
   final String translationLanguage;
   final DateTime? dateOfBirth;
   final int missedPrayerYears;
+  final bool lifeReminderEnabled;
+  final int lifeReminderHour;
+  final int lifeReminderMinute;
 
   static const AppPreferences defaults = AppPreferences(
     onboardingComplete: false,
@@ -31,6 +37,9 @@ class AppPreferences {
     translationLanguage: 'English',
     dateOfBirth: null,
     missedPrayerYears: 0,
+    lifeReminderEnabled: false,
+    lifeReminderHour: 20,
+    lifeReminderMinute: 0,
   );
 
   AppPreferences copyWith({
@@ -43,6 +52,9 @@ class AppPreferences {
     DateTime? dateOfBirth,
     bool clearDateOfBirth = false,
     int? missedPrayerYears,
+    bool? lifeReminderEnabled,
+    int? lifeReminderHour,
+    int? lifeReminderMinute,
   }) {
     return AppPreferences(
       onboardingComplete: onboardingComplete ?? this.onboardingComplete,
@@ -53,6 +65,9 @@ class AppPreferences {
       translationLanguage: translationLanguage ?? this.translationLanguage,
       dateOfBirth: clearDateOfBirth ? null : (dateOfBirth ?? this.dateOfBirth),
       missedPrayerYears: missedPrayerYears ?? this.missedPrayerYears,
+      lifeReminderEnabled: lifeReminderEnabled ?? this.lifeReminderEnabled,
+      lifeReminderHour: lifeReminderHour ?? this.lifeReminderHour,
+      lifeReminderMinute: lifeReminderMinute ?? this.lifeReminderMinute,
     );
   }
 }
@@ -86,5 +101,8 @@ class OnboardingSetup {
     translationLanguage: translationLanguage,
     dateOfBirth: dateOfBirth,
     missedPrayerYears: missedPrayerYears,
+    lifeReminderEnabled: false,
+    lifeReminderHour: 20,
+    lifeReminderMinute: 0,
   );
 }

@@ -1,3 +1,4 @@
+import 'package:ayyam/core/security/api_key_vault.dart';
 import 'package:ayyam/core/settings/app_preferences_controller.dart';
 import 'package:ayyam/core/settings/app_preferences_repository.dart';
 import 'package:ayyam/design/components/nocturne_switch.dart';
@@ -14,6 +15,24 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pumpApp(tester, MemoryAppPreferencesRepository());
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Begin'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('fits welcome and feature steps at 200 percent text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
     await _pumpApp(tester, MemoryAppPreferencesRepository());
     expect(tester.takeException(), isNull);
@@ -77,9 +96,21 @@ Future<void> _pumpApp(
     ProviderScope(
       overrides: [
         appPreferencesRepositoryProvider.overrideWithValue(repository),
+        apiKeyVaultProvider.overrideWithValue(_MemoryApiKeyVault()),
       ],
       child: const MainApp(),
     ),
   );
   await tester.pumpAndSettle();
+}
+
+class _MemoryApiKeyVault extends ApiKeyVault {
+  @override
+  Future<String?> read() async => null;
+
+  @override
+  Future<void> write(String value) async {}
+
+  @override
+  Future<void> delete() async {}
 }

@@ -1,3 +1,5 @@
+import 'package:ayyam/core/database/app_database.dart';
+import 'package:ayyam/core/database/app_database_provider.dart';
 import 'package:ayyam/core/gemini/gemini_key_validator.dart';
 import 'package:ayyam/core/security/api_key_vault.dart';
 import 'package:ayyam/core/settings/app_preferences.dart';
@@ -8,6 +10,7 @@ import 'package:ayyam/features/dua/application/today_dua_controller.dart';
 import 'package:ayyam/features/dua/data/dua_repository.dart';
 import 'package:ayyam/features/dua/domain/dua.dart';
 import 'package:ayyam/main.dart';
+import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -99,17 +102,110 @@ void main() {
     expect(find.byType(NocturneSwitch).first, findsOneWidget);
     expect(repository.value.duaEnabled, isTrue);
   });
+
+  testWidgets('enables a private daily Life check-in reminder', (tester) async {
+    final initial = AppPreferences.defaults.copyWith(
+      onboardingComplete: true,
+      duaEnabled: false,
+      lifeInDotsEnabled: true,
+      dateOfBirth: DateTime(1990, 1, 1),
+    );
+    final repository = MemoryAppPreferencesRepository(initial);
+    await _pumpApp(tester, repository, _MemoryApiKeyVault(null));
+
+    await tester.tap(find.bySemanticsLabel('Open settings'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Daily prayer check-in'));
+    await tester.tap(find.text('Daily prayer check-in'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('8:00 PM'), findsOneWidget);
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+
+    expect(repository.value.lifeReminderEnabled, isTrue);
+    expect(repository.value.lifeReminderHour, 20);
+    expect(repository.value.lifeReminderMinute, 0);
+  });
+
+  testWidgets('requires a second tap before replacing data from a backup', (
+    tester,
+  ) async {
+    final initial = AppPreferences(
+      onboardingComplete: true,
+      duaEnabled: true,
+      lifeInDotsEnabled: false,
+      reminderHour: 6,
+      reminderMinute: 0,
+      translationLanguage: 'English',
+      dateOfBirth: null,
+      missedPrayerYears: 0,
+    );
+    await _pumpApp(
+      tester,
+      MemoryAppPreferencesRepository(initial),
+      _MemoryApiKeyVault('secret-key'),
+    );
+
+    await tester.tap(find.bySemanticsLabel('Open settings'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Restore JSON from clipboard'));
+    expect(find.text('Copy backup JSON'), findsOneWidget);
+    await tester.tap(find.text('Restore JSON from clipboard'));
+    await tester.pump();
+
+    expect(find.text('Tap again to replace local data'), findsOneWidget);
+    expect(
+      find.text(
+        'This replaces current saved data. Invalid backups make no changes.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'deletes credentials and returns to onboarding after confirmation',
+    (tester) async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final repository = MemoryAppPreferencesRepository(
+        AppPreferences.defaults.copyWith(
+          onboardingComplete: true,
+          duaEnabled: true,
+          lifeInDotsEnabled: false,
+        ),
+      );
+      final vault = _MemoryApiKeyVault('secret-key');
+      await _pumpApp(tester, repository, vault, database: database);
+
+      await tester.tap(find.bySemanticsLabel('Open settings'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Delete all data'));
+      await tester.tap(find.text('Delete all data'));
+      await tester.pump();
+      expect(find.text('Tap again to delete everything'), findsOneWidget);
+
+      await tester.tap(find.text('Tap again to delete everything'));
+      await tester.pumpAndSettle();
+
+      expect(vault.value, isNull);
+      expect(repository.value.onboardingComplete, isFalse);
+      expect(find.text('Make each\nday count.'), findsOneWidget);
+    },
+  );
 }
 
 Future<void> _pumpApp(
   WidgetTester tester,
   MemoryAppPreferencesRepository repository,
-  _MemoryApiKeyVault vault,
-) async {
+  _MemoryApiKeyVault vault, {
+  AppDatabase? database,
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         appPreferencesRepositoryProvider.overrideWithValue(repository),
+        if (database != null) appDatabaseProvider.overrideWithValue(database),
         apiKeyVaultProvider.overrideWithValue(vault),
         currentDateProvider.overrideWithValue(DateTime(2026, 11, 2)),
         duaRepositoryProvider.overrideWithValue(

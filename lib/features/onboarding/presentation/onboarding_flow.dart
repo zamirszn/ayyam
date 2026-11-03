@@ -289,7 +289,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             keyboardType: TextInputType.number,
             textInputAction: TextInputAction.done,
             error: _lifeError?.contains('years') == true ? _lifeError : null,
-            helper: 'This stores an estimate only. The repayment formula remains configurable.',
+            helper: 'Each year adds 365 undated items to the personal make-up tracker; historical dots stay neutral until backfilled.',
             onChanged: (_) => setState(() => _lifeError = null),
           ),
           const SizedBox(height: NocturneSpace.x6),

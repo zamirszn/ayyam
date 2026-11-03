@@ -15,8 +15,14 @@ final selectedDuaDayProvider =
 final duaReminderPlatformProvider = Provider<DuaReminderPlatform>((ref) {
   return FlutterDuaReminderPlatform(
     onDaySelected: ref.read(selectedDuaDayProvider.notifier).select,
+    onLifeSelected: ref.read(selectedLifeReminderProvider.notifier).select,
   );
 });
+
+final selectedLifeReminderProvider =
+    NotifierProvider<SelectedLifeReminderController, bool>(
+      SelectedLifeReminderController.new,
+    );
 
 class SelectedDuaDayController extends Notifier<DateTime?> {
   @override
@@ -27,6 +33,15 @@ class SelectedDuaDayController extends Notifier<DateTime?> {
   }
 
   void clear() => state = null;
+}
+
+class SelectedLifeReminderController extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void select() => state = true;
+
+  void clear() => state = false;
 }
 
 class ReminderDeliveryStatus {
@@ -61,6 +76,12 @@ abstract interface class DuaReminderPlatform {
 
   Future<void> cancelScheduled();
 
+  Future<void> replaceLifeCheckInReminder({
+    required bool enabled,
+    required int hour,
+    required int minute,
+  });
+
   Future<void> openNotificationSettings();
 
   Future<void> openBatteryOptimizationSettings();
@@ -69,18 +90,28 @@ abstract interface class DuaReminderPlatform {
 class FlutterDuaReminderPlatform implements DuaReminderPlatform {
   factory FlutterDuaReminderPlatform({
     required void Function(DateTime day) onDaySelected,
+    required void Function() onLifeSelected,
     FlutterLocalNotificationsPlugin? plugin,
   }) => FlutterDuaReminderPlatform._(
     onDaySelected,
+    onLifeSelected,
     plugin ?? FlutterLocalNotificationsPlugin(),
   );
 
-  FlutterDuaReminderPlatform._(this._onDaySelected, this._plugin);
+  FlutterDuaReminderPlatform._(
+    this._onDaySelected,
+    this._onLifeSelected,
+    this._plugin,
+  );
 
   static const String _payloadPrefix = 'ayyam:dua:';
+  static const String _lifePayload = 'ayyam:life:today';
   static const String _channelId = 'ayyam_daily_dua';
+  static const String _lifeChannelId = 'ayyam_prayer_check_in';
+  static const int _lifeNotificationId = 910001;
 
   final void Function(DateTime day) _onDaySelected;
+  final void Function() _onLifeSelected;
   final FlutterLocalNotificationsPlugin _plugin;
   bool _initialized = false;
 
@@ -204,6 +235,54 @@ class FlutterDuaReminderPlatform implements DuaReminderPlatform {
   }
 
   @override
+  Future<void> replaceLifeCheckInReminder({
+    required bool enabled,
+    required int hour,
+    required int minute,
+  }) async {
+    if (!isAndroidRuntime) return;
+    await initialize();
+    await _plugin.cancel(id: _lifeNotificationId);
+    if (!enabled) return;
+
+    final status = await deliveryStatus();
+    final scheduleMode = status.exactAlarmsAllowed == true
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+    final now = tz.TZDateTime.now(tz.local);
+    var scheduled = tz.TZDateTime(
+      tz.local,
+      now.year,
+      now.month,
+      now.day,
+      hour,
+      minute,
+    );
+    if (!scheduled.isAfter(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+    await _plugin.zonedSchedule(
+      id: _lifeNotificationId,
+      scheduledDate: scheduled,
+      title: 'How was today’s prayer day?',
+      body: 'Take a quiet moment to record today in Life in Dots.',
+      payload: _lifePayload,
+      androidScheduleMode: scheduleMode,
+      matchDateTimeComponents: DateTimeComponents.time,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _lifeChannelId,
+          'Prayer check-in',
+          channelDescription: 'An optional daily Life in Dots check-in.',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+          category: AndroidNotificationCategory.reminder,
+        ),
+      ),
+    );
+  }
+
+  @override
   Future<void> openNotificationSettings() async {
     if (!isAndroidRuntime) return;
     await initialize();
@@ -224,6 +303,10 @@ class FlutterDuaReminderPlatform implements DuaReminderPlatform {
   }
 
   void _selectPayload(String? payload) {
+    if (payload == _lifePayload) {
+      _onLifeSelected();
+      return;
+    }
     final day = notificationDayFromPayload(payload);
     if (day != null) _onDaySelected(day);
   }

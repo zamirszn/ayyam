@@ -64,6 +64,39 @@ void main() {
     expect(repository.values, isEmpty);
   });
 
+  test('schedules a Life check-in independently of dua reminders', () async {
+    final repository = MemoryDuaRepository();
+    final reminders = _MemoryReminders();
+    final work = _MemoryWorkScheduler();
+    final coordinator = DuaReminderCoordinator(
+      repository: repository,
+      buffer: DuaBufferService(
+        repository: repository,
+        preparer: _SavingPreparer(repository),
+      ),
+      vault: _MemoryVault(null),
+      reminders: reminders,
+      workScheduler: work,
+    );
+
+    await coordinator.sync(
+      _preferences().copyWith(
+        duaEnabled: false,
+        lifeInDotsEnabled: true,
+        lifeReminderEnabled: true,
+        lifeReminderHour: 21,
+        lifeReminderMinute: 15,
+      ),
+      now: DateTime(2026, 11, 3),
+    );
+
+    expect(reminders.lifeEnabled, isTrue);
+    expect(reminders.lifeHour, 21);
+    expect(reminders.lifeMinute, 15);
+    expect(reminders.cancelled, isTrue);
+    expect(work.cancelled, isTrue);
+  });
+
   test('notification payload and preview are stable and bounded', () {
     final day = DateTime(2026, 11, 4);
     final payload = notificationPayloadForDay(day);
@@ -130,6 +163,9 @@ class _MemoryReminders implements DuaReminderPlatform {
   int? hour;
   int? minute;
   List<Dua> duas = const <Dua>[];
+  bool? lifeEnabled;
+  int? lifeHour;
+  int? lifeMinute;
 
   @override
   Future<void> cancelScheduled() async => cancelled = true;
@@ -150,6 +186,17 @@ class _MemoryReminders implements DuaReminderPlatform {
 
   @override
   Future<void> openNotificationSettings() async {}
+
+  @override
+  Future<void> replaceLifeCheckInReminder({
+    required bool enabled,
+    required int hour,
+    required int minute,
+  }) async {
+    lifeEnabled = enabled;
+    lifeHour = hour;
+    lifeMinute = minute;
+  }
 
   @override
   Future<void> replaceScheduled({

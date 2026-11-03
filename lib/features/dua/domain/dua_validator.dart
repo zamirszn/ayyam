@@ -62,22 +62,33 @@ class DuaValidator {
       }
       switch (source.type) {
         case DuaSourceType.quran:
-          if (!source.collection.toLowerCase().contains('quran')) {
+          final collection = source.collection.trim().toLowerCase();
+          if (!const <String>{
+            'quran',
+            'the quran',
+            'al-quran',
+            'al quran',
+          }.contains(collection)) {
             errors.add('A Quran source must name the Quran.');
           }
           if (!_validQuranReference(source.reference)) {
-            errors.add('Quran references must use surah:ayah format.');
+            errors.add('Quran reference is not a valid surah and ayah range.');
           }
-          if ((source.grading ?? 'Quran').toLowerCase() != 'quran') {
+          if ((source.grading ?? 'Quran').trim().toLowerCase() != 'quran') {
             errors.add('Quran sources must use the Quran grading label.');
           }
         case DuaSourceType.hadith:
-          if (source.collection.trim().length < 3 ||
-              source.reference.trim().isEmpty) {
+          final collection = source.collection.trim();
+          final reference = source.reference.trim();
+          if (collection.length < 3 ||
+              collection.length > 80 ||
+              reference.isEmpty ||
+              reference.length > 80 ||
+              !RegExp(r'\d').hasMatch(reference)) {
             errors.add('Hadith collection and reference are required.');
           }
-          final grading = source.grading?.toLowerCase() ?? '';
-          if (!grading.contains('sahih') && !grading.contains('hasan')) {
+          final grading = source.grading?.trim().toLowerCase() ?? '';
+          if (grading != 'sahih' && grading != 'hasan') {
             errors.add('Hadith grading must be Sahih or Hasan.');
           }
       }
@@ -103,9 +114,128 @@ class DuaValidator {
     final surah = int.parse(match.group(1)!);
     final firstAyah = int.parse(match.group(2)!);
     final lastAyah = int.tryParse(match.group(3) ?? '') ?? firstAyah;
-    return surah >= 1 &&
-        surah <= 114 &&
-        firstAyah >= 1 &&
+    if (surah < 1 || surah > _quranVerseCounts.length) return false;
+    final verseCount = _quranVerseCounts[surah - 1];
+    return firstAyah >= 1 &&
+        firstAyah <= verseCount &&
+        lastAyah <= verseCount &&
         lastAyah >= firstAyah;
   }
+
+  static const List<int> _quranVerseCounts = <int>[
+    7,
+    286,
+    200,
+    176,
+    120,
+    165,
+    206,
+    75,
+    129,
+    109,
+    123,
+    111,
+    43,
+    52,
+    99,
+    128,
+    111,
+    110,
+    98,
+    135,
+    112,
+    78,
+    118,
+    64,
+    77,
+    227,
+    93,
+    88,
+    69,
+    60,
+    34,
+    30,
+    73,
+    54,
+    45,
+    83,
+    182,
+    88,
+    75,
+    85,
+    54,
+    53,
+    89,
+    59,
+    37,
+    35,
+    38,
+    29,
+    18,
+    45,
+    60,
+    49,
+    62,
+    55,
+    78,
+    96,
+    29,
+    22,
+    24,
+    13,
+    14,
+    11,
+    11,
+    18,
+    12,
+    12,
+    30,
+    52,
+    52,
+    44,
+    28,
+    28,
+    20,
+    56,
+    40,
+    31,
+    50,
+    40,
+    46,
+    42,
+    29,
+    19,
+    36,
+    25,
+    22,
+    17,
+    19,
+    26,
+    30,
+    20,
+    15,
+    21,
+    11,
+    8,
+    8,
+    19,
+    5,
+    8,
+    8,
+    11,
+    11,
+    8,
+    3,
+    9,
+    5,
+    4,
+    7,
+    3,
+    6,
+    3,
+    5,
+    4,
+    5,
+    6,
+  ];
 }

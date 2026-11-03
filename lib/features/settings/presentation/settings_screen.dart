@@ -1,3 +1,4 @@
+import 'package:ayyam/core/backup/app_backup_service.dart';
 import 'package:ayyam/core/gemini/gemini_key_validator.dart';
 import 'package:ayyam/core/platform/runtime_platform.dart';
 import 'package:ayyam/core/security/api_key_vault.dart';
@@ -14,7 +15,11 @@ import 'package:ayyam/design/components/pressable.dart';
 import 'package:ayyam/design/theme/nocturne_theme.dart';
 import 'package:ayyam/design/tokens/nocturne_tokens.dart';
 import 'package:ayyam/design/type/nocturne_type.dart';
+import 'package:ayyam/features/dua/application/dua_library_service.dart';
+import 'package:ayyam/features/dua/application/dua_reminder_coordinator.dart';
 import 'package:ayyam/features/dua/application/dua_reminder_platform.dart';
+import 'package:ayyam/features/dua/application/today_dua_controller.dart';
+import 'package:ayyam/features/life/application/life_dashboard_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -36,6 +41,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late bool _lifeEnabled;
   late int _reminderHour;
   late int _reminderMinute;
+  late bool _lifeReminderEnabled;
+  late int _lifeReminderHour;
+  late int _lifeReminderMinute;
   late String _language;
   late DateTime? _birthDate;
   late final TextEditingController _apiKeyController;
@@ -54,7 +62,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _testingKey = false;
   bool _saving = false;
   bool _loadingDelivery = false;
+  bool _backingUp = false;
+  bool _deletingAll = false;
+  bool _deleteArmed = false;
+  bool _restoreArmed = false;
   ReminderDeliveryStatus? _deliveryStatus;
+  String? _backupMessage;
+  String? _backupError;
 
   @override
   void initState() {
@@ -64,6 +78,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _lifeEnabled = _savedPreferences.lifeInDotsEnabled;
     _reminderHour = _savedPreferences.reminderHour;
     _reminderMinute = _savedPreferences.reminderMinute;
+    _lifeReminderEnabled = _savedPreferences.lifeReminderEnabled;
+    _lifeReminderHour = _savedPreferences.lifeReminderHour;
+    _lifeReminderMinute = _savedPreferences.lifeReminderMinute;
     _language = _savedPreferences.translationLanguage;
     _birthDate = _savedPreferences.dateOfBirth;
     _apiKeyController = TextEditingController();
@@ -163,6 +180,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final isAndroid =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
     final lifeSection = _duaEnabled ? '04' : '02';
+    final dataSection = (2 + (_duaEnabled ? 2 : 0) + (_lifeEnabled ? 1 : 0))
+        .toString()
+        .padLeft(2, '0');
 
     return NocturneScaffold(
       tone: NocturneTone.rest,
@@ -184,7 +204,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 children: <Widget>[
                   CircleAction(
                     glyph: NocturneGlyph.chevronLeft,
-                    onTap: _saving
+                    onTap: _saving || _backingUp || _deletingAll
                         ? null
                         : () => Navigator.of(context).maybePop(),
                     semanticLabel: 'Back',
@@ -395,6 +415,49 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         const SizedBox(height: NocturneSpace.x8),
                         _SectionLabel(index: lifeSection, label: 'Life anchor'),
                         const SizedBox(height: NocturneSpace.x3),
+                        _FeatureRow(
+                          glyph: NocturneGlyph.bell,
+                          title: 'Daily prayer check-in',
+                          subtitle:
+                              'An optional private reminder to record today.',
+                          value: _lifeReminderEnabled,
+                          onChanged: (value) => setState(() {
+                            _lifeReminderEnabled = value;
+                            _clearFeedback();
+                          }),
+                        ),
+                        if (_lifeReminderEnabled) ...<Widget>[
+                          const SizedBox(height: NocturneSpace.x3),
+                          NocturnePickerField(
+                            label: 'Check-in time',
+                            value: nocturneClockLabel(
+                              _lifeReminderHour,
+                              _lifeReminderMinute,
+                            ),
+                            glyph: NocturneGlyph.clock,
+                            onTap: _pickLifeReminderTime,
+                            helper: 'Opens Life in Dots from the reminder. Off by default.',
+                          ),
+                          if (!_duaEnabled) ...<Widget>[
+                            const SizedBox(height: NocturneSpace.x3),
+                            _StatusRow(
+                              glyph: NocturneGlyph.bell,
+                              title: 'Reminder permission',
+                              subtitle: isAndroid
+                                  ? 'Required for the daily check-in notification.'
+                                  : 'Browser delivery is best-effort; the check-in remains available in-app.',
+                              status: isAndroid
+                                  ? _deliveryLabel(
+                                      _deliveryStatus?.notificationsAllowed,
+                                    )
+                                  : 'BEST EFFORT',
+                              onTap: isAndroidRuntime
+                                  ? _requestReminderPermissions
+                                  : null,
+                            ),
+                          ],
+                        ],
+                        const SizedBox(height: NocturneSpace.x5),
                         NocturnePickerField(
                           label: 'Date of birth',
                           value: _birthDate == null
@@ -423,13 +486,94 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           error: _lifeError?.contains('years') == true
                               ? _lifeError
                               : null,
-                          helper: 'An estimate only; no religious ruling is implied.',
+                          helper: 'Each year adds 365 undated personal make-up items; no historical dates are assumed.',
                           onChanged: (_) => setState(() {
                             _lifeError = null;
                             _clearFeedback();
                           }),
                         ),
                       ],
+                      const SizedBox(height: NocturneSpace.x8),
+                      _SectionLabel(index: dataSection, label: 'Your data'),
+                      const SizedBox(height: NocturneSpace.x3),
+                      GlassCard(
+                        tint: theme.blue,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              'Private JSON backup',
+                              style: NocturneType.bodyStrong(theme.ink),
+                            ),
+                            const SizedBox(height: NocturneSpace.x2),
+                            Text(
+                              'Copies saved settings, duas, prayer days, and make-up progress. Your Gemini key is never included.',
+                              style: NocturneType.caption(theme.muted),
+                            ),
+                            const SizedBox(height: NocturneSpace.x4),
+                            NocturneButton(
+                              label: _backingUp
+                                  ? 'Preparing backup…'
+                                  : 'Copy backup JSON',
+                              style: NocturneButtonStyle.glass,
+                              compact: true,
+                              onTap: _backingUp || _deletingAll
+                                  ? null
+                                  : _copyBackup,
+                            ),
+                            const SizedBox(height: NocturneSpace.x2),
+                            NocturneButton(
+                              label: _restoreArmed
+                                  ? 'Tap again to replace local data'
+                                  : 'Restore JSON from clipboard',
+                              style: NocturneButtonStyle.danger,
+                              compact: true,
+                              onTap: _backingUp || _deletingAll
+                                  ? null
+                                  : _restoreBackup,
+                            ),
+                            if (_restoreArmed) ...<Widget>[
+                              const SizedBox(height: NocturneSpace.x2),
+                              Text(
+                                'This replaces current saved data. Invalid backups make no changes.',
+                                style: NocturneType.caption(theme.missed),
+                              ),
+                            ],
+                            const SizedBox(height: NocturneSpace.x2),
+                            NocturneButton(
+                              label: _deletingAll
+                                  ? 'Deleting local data…'
+                                  : _deleteArmed
+                                  ? 'Tap again to delete everything'
+                                  : 'Delete all data',
+                              style: NocturneButtonStyle.danger,
+                              compact: true,
+                              onTap: _backingUp || _deletingAll
+                                  ? null
+                                  : _deleteAllData,
+                            ),
+                            if (_deleteArmed) ...<Widget>[
+                              const SizedBox(height: NocturneSpace.x2),
+                              Text(
+                                'This permanently removes all saved duas, prayer records, settings, and the Gemini key, then returns to onboarding.',
+                                style: NocturneType.caption(theme.missed),
+                              ),
+                            ],
+                            if (_backupError != null ||
+                                _backupMessage != null) ...<Widget>[
+                              const SizedBox(height: NocturneSpace.x3),
+                              Text(
+                                _backupError ?? _backupMessage!,
+                                style: NocturneType.caption(
+                                  _backupError == null
+                                      ? theme.kept
+                                      : theme.missed,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: NocturneSpace.x8),
                       ColoredBox(
                         color: theme.line,
@@ -458,9 +602,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(height: NocturneSpace.x3),
               ],
               NocturneButton(
-                label: _saving ? 'Saving…' : 'Save changes',
-                trailing: _saving ? null : NocturneGlyph.check,
-                onTap: _saving ? null : _save,
+                label: _saving
+                    ? 'Saving…'
+                    : _backingUp || _deletingAll
+                    ? 'Working…'
+                    : 'Save changes',
+                trailing: _saving || _backingUp || _deletingAll
+                    ? null
+                    : NocturneGlyph.check,
+                onTap: _saving || _backingUp || _deletingAll ? null : _save,
               ),
             ],
           ),
@@ -530,6 +680,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
   }
 
+  Future<void> _pickLifeReminderTime() async {
+    final picked = await showNocturneTimePicker(
+      context,
+      hour: _lifeReminderHour,
+      minute: _lifeReminderMinute,
+    );
+    if (!mounted || picked == null) return;
+    setState(() {
+      _lifeReminderHour = picked.hour;
+      _lifeReminderMinute = picked.minute;
+      _clearFeedback();
+    });
+  }
+
   Future<void> _testKey() async {
     final key = _apiKeyController.text.trim();
     if (key.isEmpty) {
@@ -576,6 +740,139 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _copyBackup() async {
+    setState(() {
+      _backingUp = true;
+      _deleteArmed = false;
+      _restoreArmed = false;
+      _backupError = null;
+      _backupMessage = null;
+    });
+    try {
+      final json = await ref.read(appBackupServiceProvider).exportJson();
+      await Clipboard.setData(ClipboardData(text: json));
+      if (!mounted) return;
+      setState(() {
+        _backingUp = false;
+        _backupMessage = 'Backup copied. The Gemini key was excluded.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _backingUp = false;
+        _backupError = 'Could not copy a backup. Check clipboard access.';
+      });
+    }
+  }
+
+  Future<void> _restoreBackup() async {
+    if (!_restoreArmed) {
+      setState(() {
+        _deleteArmed = false;
+        _restoreArmed = true;
+        _backupError = null;
+        _backupMessage = null;
+      });
+      return;
+    }
+    setState(() {
+      _backingUp = true;
+      _restoreArmed = false;
+      _backupError = null;
+      _backupMessage = null;
+    });
+    try {
+      final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
+      final source = clipboard?.text?.trim();
+      if (source == null || source.isEmpty) {
+        throw const FormatException('Clipboard is empty.');
+      }
+      final result = await ref
+          .read(appBackupServiceProvider)
+          .importJson(source);
+      ref
+        ..invalidate(appPreferencesProvider)
+        ..invalidate(todayDuaProvider)
+        ..invalidate(duaLibraryProvider)
+        ..invalidate(lifeDashboardProvider);
+      if (!mounted) return;
+      final preferences = result.preferences;
+      setState(() {
+        _savedPreferences = preferences;
+        _duaEnabled = preferences.duaEnabled;
+        _lifeEnabled = preferences.lifeInDotsEnabled;
+        _reminderHour = preferences.reminderHour;
+        _reminderMinute = preferences.reminderMinute;
+        _lifeReminderEnabled = preferences.lifeReminderEnabled;
+        _lifeReminderHour = preferences.lifeReminderHour;
+        _lifeReminderMinute = preferences.lifeReminderMinute;
+        _language = preferences.translationLanguage;
+        _birthDate = preferences.dateOfBirth;
+        _missedYearsController.text = preferences.missedPrayerYears == 0
+            ? ''
+            : '${preferences.missedPrayerYears}';
+        _backingUp = false;
+        _backupMessage =
+            'Restored ${result.duas} duas, ${result.prayerDays} prayer days, and ${result.makeupDebts} make-up items.';
+      });
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _backingUp = false;
+        _backupError = 'Backup not restored: ${error.message}';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _backingUp = false;
+        _backupError =
+            'Could not restore this backup. Local data is unchanged.';
+      });
+    }
+  }
+
+  Future<void> _deleteAllData() async {
+    if (!_deleteArmed) {
+      setState(() {
+        _deleteArmed = true;
+        _restoreArmed = false;
+        _backupError = null;
+        _backupMessage = null;
+      });
+      return;
+    }
+    setState(() {
+      _deletingAll = true;
+      _deleteArmed = false;
+      _restoreArmed = false;
+      _backupError = null;
+      _backupMessage = null;
+    });
+    try {
+      await ref
+          .read(duaReminderCoordinatorProvider)
+          .sync(AppPreferences.defaults);
+      await ref.read(apiKeyVaultProvider).delete();
+      await ref.read(appBackupServiceProvider).deleteAllData();
+      ref.read(selectedDuaDayProvider.notifier).clear();
+      ref.read(selectedLifeReminderProvider.notifier).clear();
+      ref
+        ..invalidate(appPreferencesProvider)
+        ..invalidate(todayDuaProvider)
+        ..invalidate(duaLibraryProvider)
+        ..invalidate(lifeDashboardProvider);
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _deletingAll = false;
+        _backupError =
+            'Reset could not finish. Retry to clear any remaining local data.';
+      });
+    }
+  }
+
   Future<void> _save() async {
     FocusManager.instance.primaryFocus?.unfocus();
     if (!_duaEnabled && !_lifeEnabled) {
@@ -618,6 +915,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       translationLanguage: _language,
       dateOfBirth: birthDate,
       missedPrayerYears: missedYears,
+      lifeReminderEnabled: _lifeReminderEnabled,
+      lifeReminderHour: _lifeReminderHour,
+      lifeReminderMinute: _lifeReminderMinute,
     );
 
     setState(() {

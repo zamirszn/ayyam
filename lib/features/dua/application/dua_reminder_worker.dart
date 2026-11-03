@@ -91,7 +91,10 @@ Future<bool> _runBackgroundSync() async {
       first,
       first.add(const Duration(days: 5)),
     );
-    final reminders = FlutterDuaReminderPlatform(onDaySelected: (_) {});
+    final reminders = FlutterDuaReminderPlatform(
+      onDaySelected: (_) {},
+      onLifeSelected: () {},
+    );
     await reminders.replaceScheduled(
       duas: duas,
       hour: preferences.reminderHour,

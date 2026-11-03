@@ -27,7 +27,49 @@ class DuaRecords extends Table {
   ];
 }
 
-@DriftDatabase(tables: [DuaRecords])
+@DataClassName('PrayerDayRecord')
+class PrayerDayRecords extends Table {
+  TextColumn get day => text()();
+  TextColumn get status => text()();
+  BoolColumn get estimated => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get recordedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {day};
+}
+
+@DataClassName('MakeupDebtRecord')
+class MakeupDebtRecords extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get sourceDay => text().nullable()();
+  TextColumn get origin => text()();
+  IntColumn get completedSteps => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get repaidAt => dateTime().nullable()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {sourceDay},
+  ];
+}
+
+@DataClassName('LifeMetadataRecord')
+class LifeMetadataRecords extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column> get primaryKey => {key};
+}
+
+@DriftDatabase(
+  tables: [
+    DuaRecords,
+    PrayerDayRecords,
+    MakeupDebtRecords,
+    LifeMetadataRecords,
+  ],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
@@ -44,5 +86,17 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (migrator) => migrator.createAll(),
+    onUpgrade: (migrator, from, to) async {
+      if (from < 2) {
+        await migrator.createTable(prayerDayRecords);
+        await migrator.createTable(makeupDebtRecords);
+        await migrator.createTable(lifeMetadataRecords);
+      }
+    },
+  );
 }

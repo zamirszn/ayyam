@@ -28,10 +28,19 @@ class WelcomeScreen extends StatelessWidget {
         child: Column(
           children: <Widget>[
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: <Widget>[
-                Text('AYYAM', style: NocturneType.label(theme.ink)),
-                Text('WELCOME / 001', style: NocturneType.label(theme.muted)),
+                Expanded(
+                  child: Text('AYYAM', style: NocturneType.label(theme.ink)),
+                ),
+                const SizedBox(width: NocturneSpace.x3),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'WELCOME / 001',
+                    textAlign: TextAlign.end,
+                    style: NocturneType.label(theme.muted),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: NocturneSpace.x6),

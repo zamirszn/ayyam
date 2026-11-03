@@ -14,6 +14,7 @@ import 'package:ayyam/features/dua/application/today_dua_controller.dart';
 import 'package:ayyam/features/dua/domain/dua.dart';
 import 'package:ayyam/features/dua/presentation/dua_library_screen.dart';
 import 'package:ayyam/features/dua/presentation/source_detail_screen.dart';
+import 'package:ayyam/features/life/presentation/life_screen.dart';
 import 'package:ayyam/features/settings/presentation/settings_screen.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,6 +28,16 @@ class TodayScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final today = ref.watch(currentDateProvider);
     final selectedDay = ref.watch(selectedDuaDayProvider);
+    final lifeReminderSelected = ref.watch(selectedLifeReminderProvider);
+    if (lifeReminderSelected) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!ref.read(selectedLifeReminderProvider)) return;
+        ref.read(selectedLifeReminderProvider.notifier).clear();
+        if (context.mounted && preferences.lifeInDotsEnabled) {
+          _openLife(context);
+        }
+      });
+    }
     final library = preferences.duaEnabled
         ? ref.watch(duaLibraryProvider)
         : null;
@@ -51,28 +62,41 @@ class TodayScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Row(
-              children: <Widget>[
-                Text('AYYAM', style: NocturneType.label(theme.ink)),
-                const Spacer(),
-                Text('TODAY / 001', style: NocturneType.label(theme.muted)),
-                const SizedBox(width: NocturneSpace.x3),
-                if (preferences.duaEnabled) ...<Widget>[
+            LayoutBuilder(
+              builder: (context, constraints) => Row(
+                children: <Widget>[
+                  Text('AYYAM', style: NocturneType.label(theme.ink)),
+                  const Spacer(),
+                  if (constraints.maxWidth >= 360) ...<Widget>[
+                    Text('TODAY / 001', style: NocturneType.label(theme.muted)),
+                    const SizedBox(width: NocturneSpace.x3),
+                  ],
+                  if (preferences.duaEnabled) ...<Widget>[
+                    CircleAction(
+                      glyph: NocturneGlyph.calendar,
+                      onTap: () => _openLibrary(context),
+                      semanticLabel: 'Open dua library',
+                      size: 38,
+                    ),
+                    const SizedBox(width: NocturneSpace.x2),
+                  ],
+                  if (preferences.lifeInDotsEnabled) ...<Widget>[
+                    CircleAction(
+                      glyph: NocturneGlyph.dots,
+                      onTap: () => _openLife(context),
+                      semanticLabel: 'Open Life in Dots',
+                      size: 38,
+                    ),
+                    const SizedBox(width: NocturneSpace.x2),
+                  ],
                   CircleAction(
-                    glyph: NocturneGlyph.calendar,
-                    onTap: () => _openLibrary(context),
-                    semanticLabel: 'Open dua library',
+                    glyph: NocturneGlyph.settings,
+                    onTap: () => _openSettings(context),
+                    semanticLabel: 'Open settings',
                     size: 38,
                   ),
-                  const SizedBox(width: NocturneSpace.x2),
                 ],
-                CircleAction(
-                  glyph: NocturneGlyph.settings,
-                  onTap: () => _openSettings(context),
-                  semanticLabel: 'Open settings',
-                  size: 38,
-                ),
-              ],
+              ),
             ),
             const SizedBox(height: NocturneSpace.x6),
             Expanded(
@@ -130,7 +154,7 @@ class TodayScreen extends ConsumerWidget {
                     ],
                     if (preferences.lifeInDotsEnabled) ...<Widget>[
                       const SizedBox(height: NocturneSpace.x8),
-                      const _LifePreview(),
+                      _LifePreview(onTap: () => _openLife(context)),
                     ],
                     const SizedBox(height: NocturneSpace.x8),
                     Text(
@@ -162,6 +186,15 @@ class TodayScreen extends ConsumerWidget {
       nocturnePageRoute<void>(
         const RouteSettings(name: '/dua/library'),
         (_) => const DuaLibraryScreen(),
+      ),
+    );
+  }
+
+  void _openLife(BuildContext context) {
+    Navigator.of(context).push<void>(
+      nocturnePageRoute<void>(
+        const RouteSettings(name: '/life'),
+        (_) => const LifeScreen(),
       ),
     );
   }
@@ -681,7 +714,9 @@ class _LifeOnlyHeader extends StatelessWidget {
 }
 
 class _LifePreview extends StatelessWidget {
-  const _LifePreview();
+  const _LifePreview({required this.onTap});
+
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -692,6 +727,8 @@ class _LifePreview extends StatelessWidget {
         const _SectionRule(index: 'L1', label: 'Life in Dots'),
         const SizedBox(height: NocturneSpace.x3),
         GlassCard(
+          onTap: onTap,
+          semanticLabel: 'Open Life in Dots',
           child: Row(
             children: <Widget>[
               NocturneIcon(NocturneGlyph.dots, color: theme.ink),
@@ -701,18 +738,22 @@ class _LifePreview extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'Lifetime view ready',
+                      'Open your 100-year view',
                       style: NocturneType.bodyStrong(theme.ink),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Daily prayer check-ins arrive in the Life in Dots milestone.',
+                      'Zoom the dots, check in today, and track your personal make-up practice.',
                       style: NocturneType.caption(theme.muted),
                     ),
                   ],
                 ),
               ),
-              Text('NEXT', style: NocturneType.label(theme.faint)),
+              NocturneIcon(
+                NocturneGlyph.arrowRight,
+                size: 18,
+                color: theme.faint,
+              ),
             ],
           ),
         ),

@@ -10,29 +10,23 @@ void main() {
   test('requests structured JSON without putting the key in the URL', () async {
     final client = GeminiDuaClient(
       client: MockClient((request) async {
-        expect(request.url.queryParameters, isEmpty);
+        expect(request.url.queryParameters, isNot(contains('key')));
         expect(request.headers['x-goog-api-key'], 'test-key');
+        if (request.method == 'GET') {
+          return http.Response(
+            jsonEncode(_modelList(<String>['gemini-3-flash-preview'])),
+            200,
+          );
+        }
+        expect(
+          request.url.path,
+          '/v1beta/models/gemini-3-flash-preview:generateContent',
+        );
         final body = jsonDecode(request.body) as Map<String, Object?>;
         final config = body['generationConfig']! as Map<String, Object?>;
         expect(config['responseMimeType'], 'application/json');
         expect(config['responseJsonSchema'], isA<Map<String, Object?>>());
-        return http.Response(
-          jsonEncode(<String, Object?>{
-            'candidates': <Object?>[
-              <String, Object?>{
-                'content': <String, Object?>{
-                  'parts': <Object?>[
-                    <String, Object?>{'text': jsonEncode(_responseCandidate())},
-                  ],
-                },
-              },
-            ],
-          }),
-          200,
-          headers: const <String, String>{
-            'content-type': 'application/json; charset=utf-8',
-          },
-        );
+        return _generationResponse();
       }),
     );
 
@@ -46,6 +40,47 @@ void main() {
 
     expect(result.arabic, 'رَبِّ زِدْنِي عِلْمًا');
     expect(result.sources.single.type, DuaSourceType.quran);
+  });
+
+  test('re-resolves once when a listed model returns 404', () async {
+    var generationCalls = 0;
+    final client = GeminiDuaClient(
+      client: MockClient((request) async {
+        if (request.method == 'GET') {
+          return http.Response(
+            jsonEncode(
+              _modelList(<String>['gemini-2.5-flash', 'gemini-flash-latest']),
+            ),
+            200,
+          );
+        }
+        generationCalls++;
+        if (request.url.path.contains('gemini-2.5-flash')) {
+          return http.Response(
+            jsonEncode(<String, Object?>{
+              'error': <String, Object?>{'message': 'Model was not found.'},
+            }),
+            404,
+          );
+        }
+        expect(
+          request.url.path,
+          '/v1beta/models/gemini-flash-latest:generateContent',
+        );
+        return _generationResponse();
+      }),
+    );
+
+    final result = await client.generate(
+      apiKey: 'test-key',
+      language: 'English',
+      exclusionHints: const <String>[],
+      category: 'guidance',
+      attempt: 0,
+    );
+
+    expect(result.arabic, 'رَبِّ زِدْنِي عِلْمًا');
+    expect(generationCalls, 2);
   });
 
   test('maps authentication failures without exposing the key', () async {
@@ -84,6 +119,34 @@ void main() {
     );
   });
 }
+
+Map<String, Object?> _modelList(List<String> names) => <String, Object?>{
+  'models': <Object?>[
+    for (final name in names)
+      <String, Object?>{
+        'name': 'models/$name',
+        'supportedGenerationMethods': <String>['generateContent'],
+      },
+  ],
+};
+
+http.Response _generationResponse() => http.Response(
+  jsonEncode(<String, Object?>{
+    'candidates': <Object?>[
+      <String, Object?>{
+        'content': <String, Object?>{
+          'parts': <Object?>[
+            <String, Object?>{'text': jsonEncode(_responseCandidate())},
+          ],
+        },
+      },
+    ],
+  }),
+  200,
+  headers: const <String, String>{
+    'content-type': 'application/json; charset=utf-8',
+  },
+);
 
 Map<String, Object?> _responseCandidate() => <String, Object?>{
   'arabic': 'رَبِّ زِدْنِي عِلْمًا',

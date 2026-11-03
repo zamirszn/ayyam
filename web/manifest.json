@@ -1,12 +1,16 @@
 {
     "name": "Ayyam",
     "short_name": "Ayyam",
+    "id": "./",
     "start_url": ".",
+    "scope": "./",
     "display": "standalone",
     "background_color": "#08090B",
     "theme_color": "#08090B",
     "description": "A calm, private companion for dua and prayer reflection.",
-    "orientation": "portrait-primary",
+    "lang": "en",
+    "dir": "auto",
+    "categories": ["lifestyle", "productivity"],
     "prefer_related_applications": false,
     "icons": [
         {

@@ -19,6 +19,7 @@
 - Visualizes a 100-year life as one dot per day.
 - Records days when all five prayers were completed, missed, or later addressed through the user's chosen personal practice.
 - Supports historical estimates, make-up progress, completion trends, and debt projections.
+- Offers an optional daily check-in reminder with its own time.
 - Keeps disputed religious framing explicit and configurable instead of presenting it as settled guidance.
 
 Both features are optional and can be enabled or disabled independently without deleting their data.
@@ -50,12 +51,15 @@ The user supplies their own Gemini API key. On Android it will be stored in Keys
 - [x] Local database, Gemini generation, validation, deduplication, and dua card
 - [x] Android notifications, exact alarms, reboot recovery, and five-day prefetch
 - [x] History, collection, source details, and streaks
-- [ ] Life in Dots visualization, prayer check-in, and personal make-up tracking
-- [ ] Analytics, data export/import, web build, accessibility, and release QA
+- [x] Life in Dots visualization, prayer check-in, personal make-up tracking, and analytics
+- [x] Private JSON backup/restore, credential exclusion, and full local reset
+- [x] Web/PWA hardening and keyboard/screen-reader navigation
+- [x] Optional daily Life in Dots prayer check-in reminder
+- [ ] Curated fallback duas, stronger source verification, and more personal reminder controls
 
 ## Current status
 
-Ayyam is in early development. The app now includes calendar and swipe-based dua history, a searchable and filterable recited collection, full source-detail views, and honest current/longest streaks that are not repaired by late recitation. Work is moving next to Life in Dots, prayer check-ins, and personal make-up tracking.
+Ayyam is a personal, local-first app. It now includes sourced dua history and collection tools alongside a 100-year Life in Dots canvas, daily prayer check-ins and reminders, historical backfill, personal make-up tracking, local analytics, private JSON backup/restore, and keyboard-operable controls. Work is moving next to stronger source verification and personal reminder controls.
 
 The complete product requirements are in the [PRD](./PRD%20Dua%20Bucket%20List%20and%20Life%20in%20Dots.md).
 
@@ -75,6 +79,11 @@ flutter pub get
 dart run build_runner build --delete-conflicting-outputs
 flutter run
 ```
+
+For a store-signed Android build, copy `android/key.properties.example` to
+`android/key.properties`, point it at a private upload keystore, and replace the
+placeholder credentials. The real properties file and keystore are ignored by
+Git. Without them, local release builds deliberately fall back to debug signing.
 
 Before running the web target, install Drift's checked runtime assets:
 
