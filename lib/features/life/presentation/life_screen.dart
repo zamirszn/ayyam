@@ -104,7 +104,10 @@ class _LifeScreenState extends ConsumerState<LifeScreen> {
                         style: NocturneType.label(theme.muted),
                       ),
                     ),
-                    Text('PINCH · TAP', style: NocturneType.label(theme.faint)),
+                    Text(
+                      'SCROLL · TAP',
+                      style: NocturneType.label(theme.faint),
+                    ),
                   ],
                 ),
                 const SizedBox(height: NocturneSpace.x3),

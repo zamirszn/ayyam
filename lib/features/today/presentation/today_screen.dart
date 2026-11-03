@@ -2,6 +2,7 @@ import 'package:ayyam/core/settings/app_preferences.dart';
 import 'package:ayyam/design/components/glass_card.dart';
 import 'package:ayyam/design/components/nocturne_button.dart';
 import 'package:ayyam/design/components/nocturne_icon.dart';
+import 'package:ayyam/design/components/nocturne_nav_shell.dart';
 import 'package:ayyam/design/components/nocturne_scaffold.dart';
 import 'package:ayyam/design/components/pressable.dart';
 import 'package:ayyam/design/routes/nocturne_page_route.dart';
@@ -14,6 +15,8 @@ import 'package:ayyam/features/dua/application/today_dua_controller.dart';
 import 'package:ayyam/features/dua/domain/dua.dart';
 import 'package:ayyam/features/dua/presentation/dua_library_screen.dart';
 import 'package:ayyam/features/dua/presentation/source_detail_screen.dart';
+import 'package:ayyam/features/life/application/life_dashboard_controller.dart';
+import 'package:ayyam/features/life/domain/prayer_day.dart';
 import 'package:ayyam/features/life/presentation/life_screen.dart';
 import 'package:ayyam/features/settings/presentation/settings_screen.dart';
 import 'package:flutter/widgets.dart';
@@ -44,72 +47,58 @@ class TodayScreen extends ConsumerWidget {
     final duaState = preferences.duaEnabled
         ? ref.watch(todayDuaProvider)
         : null;
+    final lifeDashboard = preferences.lifeInDotsEnabled
+        ? ref.watch(lifeDashboardProvider)
+        : null;
     final readyState = duaState?.value;
-    final tone = readyState is TodayDuaReady && readyState.dua.isRecited
-        ? NocturneTone.kept
-        : NocturneTone.rest;
+    final tone = switch (readyState) {
+      TodayDuaReady(:final dua) =>
+        dua.isRecited ? NocturneTone.kept : NocturneTone.pending,
+      TodayDuaFlagged() => NocturneTone.missed,
+      _ => NocturneTone.rest,
+    };
     final theme = NocturneScope.of(context);
 
     return NocturneScaffold(
       tone: tone,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          NocturneSpace.gutter,
-          NocturneSpace.x2,
-          NocturneSpace.gutter,
-          NocturneSpace.x5,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      includeBottomSafeArea: false,
+      child: SizedBox.expand(
+        child: Stack(
           children: <Widget>[
-            LayoutBuilder(
-              builder: (context, constraints) => Row(
-                children: <Widget>[
-                  Text('AYYAM', style: NocturneType.label(theme.ink)),
-                  const Spacer(),
-                  if (constraints.maxWidth >= 360) ...<Widget>[
-                    Text('TODAY / 001', style: NocturneType.label(theme.muted)),
-                    const SizedBox(width: NocturneSpace.x3),
-                  ],
-                  if (preferences.duaEnabled) ...<Widget>[
-                    CircleAction(
-                      glyph: NocturneGlyph.calendar,
-                      onTap: () => _openLibrary(context),
-                      semanticLabel: 'Open dua library',
-                      size: 38,
-                    ),
-                    const SizedBox(width: NocturneSpace.x2),
-                  ],
-                  if (preferences.lifeInDotsEnabled) ...<Widget>[
-                    CircleAction(
-                      glyph: NocturneGlyph.dots,
-                      onTap: () => _openLife(context),
-                      semanticLabel: 'Open Life in Dots',
-                      size: 38,
-                    ),
-                    const SizedBox(width: NocturneSpace.x2),
-                  ],
-                  CircleAction(
-                    glyph: NocturneGlyph.settings,
-                    onTap: () => _openSettings(context),
-                    semanticLabel: 'Open settings',
-                    size: 38,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: NocturneSpace.x6),
-            Expanded(
+            Positioned.fill(
               child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(
+                  NocturneSpace.gutter,
+                  NocturneSpace.x2,
+                  NocturneSpace.gutter,
+                  NocturneSpace.navHeight + NocturneSpace.x10,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(
-                      _dateLabel(today),
-                      style: NocturneType.label(theme.faint),
+                    LayoutBuilder(
+                      builder: (context, constraints) => Row(
+                        children: <Widget>[
+                          Text('AYYAM', style: NocturneType.label(theme.ink)),
+                          const Spacer(),
+                          if (constraints.maxWidth >= 360) ...<Widget>[
+                            Text(
+                              '${_shortDateLabel(today)} / (001)',
+                              style: NocturneType.label(theme.muted),
+                            ),
+                            const SizedBox(width: NocturneSpace.x3),
+                          ],
+                          CircleAction(
+                            glyph: NocturneGlyph.settings,
+                            onTap: () => _openSettings(context),
+                            semanticLabel: 'Open settings',
+                            size: 38,
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(height: 30),
                     if (selectedDay != null) ...<Widget>[
-                      const SizedBox(height: NocturneSpace.x2),
                       Pressable(
                         onTap: () =>
                             ref.read(selectedDuaDayProvider.notifier).clear(),
@@ -122,8 +111,25 @@ class TodayScreen extends ConsumerWidget {
                           ),
                         ),
                       ),
+                      const SizedBox(height: NocturneSpace.x3),
                     ],
-                    const SizedBox(height: NocturneSpace.x3),
+                    _DailyOverview(
+                      preferences: preferences,
+                      duaState: duaState,
+                      library: library,
+                      lifeDashboard: lifeDashboard,
+                      onOpenLibrary: () => _openLibrary(context),
+                      onOpenLife: () => _openLife(context),
+                      onMarkRecited:
+                          readyState is TodayDuaReady &&
+                              !readyState.dua.isRecited &&
+                              readyState.canMarkRecited
+                          ? () => ref
+                                .read(todayDuaProvider.notifier)
+                                .markRecited()
+                          : null,
+                    ),
+                    const SizedBox(height: NocturneSpace.x10),
                     if (duaState != null)
                       duaState.when(
                         data: (state) => _DuaStateView(
@@ -131,8 +137,6 @@ class TodayScreen extends ConsumerWidget {
                           onRetry: () =>
                               ref.read(todayDuaProvider.notifier).retry(),
                           onOpenSettings: () => _openSettings(context),
-                          onMarkRecited: () =>
-                              ref.read(todayDuaProvider.notifier).markRecited(),
                           onReportIssue: () =>
                               ref.read(todayDuaProvider.notifier).reportIssue(),
                         ),
@@ -145,25 +149,55 @@ class TodayScreen extends ConsumerWidget {
                       )
                     else
                       const _LifeOnlyHeader(),
-                    if (library != null) ...<Widget>[
-                      const SizedBox(height: NocturneSpace.x8),
-                      _LibraryPreview(
-                        library: library,
-                        onTap: () => _openLibrary(context),
-                      ),
-                    ],
                     if (preferences.lifeInDotsEnabled) ...<Widget>[
                       const SizedBox(height: NocturneSpace.x8),
-                      _LifePreview(onTap: () => _openLife(context)),
+                      _LifePreview(
+                        dashboard: lifeDashboard!,
+                        onTap: () => _openLife(context),
+                      ),
                     ],
                     const SizedBox(height: NocturneSpace.x8),
+                    ColoredBox(
+                      color: theme.line,
+                      child: const SizedBox(width: double.infinity, height: 1),
+                    ),
+                    const SizedBox(height: NocturneSpace.x4),
                     Text(
                       'LOCAL FIRST / PRIVATE BY DEFAULT',
                       style: NocturneType.label(theme.faint),
                     ),
-                    const SizedBox(height: NocturneSpace.x3),
                   ],
                 ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: NocturneNavShell(
+                selectedIndex: 0,
+                items: <NocturneNavItem>[
+                  NocturneNavItem(
+                    label: 'Today',
+                    glyph: NocturneGlyph.calendar,
+                    onTap: () {},
+                  ),
+                  NocturneNavItem(
+                    label: preferences.lifeInDotsEnabled ? 'Life' : 'Library',
+                    glyph: preferences.lifeInDotsEnabled
+                        ? NocturneGlyph.dots
+                        : NocturneGlyph.book,
+                    semanticLabel: preferences.lifeInDotsEnabled
+                        ? 'Open Life in Dots'
+                        : 'Open dua library',
+                    onTap: preferences.lifeInDotsEnabled
+                        ? () => _openLife(context)
+                        : () => _openLibrary(context),
+                  ),
+                  NocturneNavItem(
+                    label: 'You',
+                    glyph: NocturneGlyph.settings,
+                    onTap: () => _openSettings(context),
+                  ),
+                ],
               ),
             ),
           ],
@@ -217,21 +251,750 @@ class TodayScreen extends ConsumerWidget {
     return '${date.day.toString().padLeft(2, '0')} '
         '${months[date.month - 1]} ${date.year}';
   }
+
+  static String _shortDateLabel(DateTime date) =>
+      _dateLabel(date).substring(0, 6);
 }
+
+class _DailyOverview extends StatelessWidget {
+  const _DailyOverview({
+    required this.preferences,
+    required this.duaState,
+    required this.library,
+    required this.lifeDashboard,
+    required this.onOpenLibrary,
+    required this.onOpenLife,
+    required this.onMarkRecited,
+  });
+
+  final AppPreferences preferences;
+  final AsyncValue<TodayDuaState>? duaState;
+  final AsyncValue<DuaLibrary>? library;
+  final AsyncValue<LifeDashboard>? lifeDashboard;
+  final VoidCallback onOpenLibrary;
+  final VoidCallback onOpenLife;
+  final VoidCallback? onMarkRecited;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = NocturneScope.of(context);
+    final currentDua = duaState?.asData?.value;
+    final libraryValue = library?.asData?.value;
+    final lifeValue = lifeDashboard?.asData?.value;
+    final stats = libraryValue?.stats;
+    final streak = stats?.current ?? 0;
+    final assigned = stats?.totalAssigned ?? 0;
+    final collected = stats?.totalCollected ?? 0;
+    final rate = assigned == 0 ? 0.0 : collected / assigned;
+    final percentage = (rate * 100).round();
+    final recited = currentDua is TodayDuaReady && currentDua.dua.isRecited;
+    final status = _duaStatus(currentDua, duaState?.isLoading ?? false);
+    final statusColor = recited ? theme.kept : theme.pending;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          preferences.duaEnabled ? _headline(currentDua) : 'A life in\ndays.',
+          style: NocturneType.hero(theme.ink),
+        ),
+        const SizedBox(height: NocturneSpace.x3),
+        Row(
+          children: <Widget>[
+            Container(
+              width: 26,
+              height: 3,
+              decoration: BoxDecoration(
+                color: theme.accent,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: NocturneSpace.x3),
+            Text(
+              preferences.duaEnabled ? 'daily remembrance' : 'a life in days',
+              style: NocturneType.body(theme.muted),
+            ),
+            const SizedBox(width: NocturneSpace.x3),
+            Expanded(
+              child: Text(
+                preferences.duaEnabled
+                    ? 'DAILY / ${_clock(preferences.reminderHour, preferences.reminderMinute)}'
+                    : 'PRIVATE / LOCAL',
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: NocturneType.label(theme.faint),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 26),
+        GlassCard(
+          glow: true,
+          tint: statusColor,
+          padding: const EdgeInsets.fromLTRB(20, 20, 18, 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          preferences.duaEnabled ? 'DAY STREAK' : 'DAYS LIVED',
+                          style: NocturneType.label(theme.muted),
+                        ),
+                        const SizedBox(height: NocturneSpace.x3),
+                        _DotMatrixNumber(
+                          preferences.duaEnabled
+                              ? streak
+                              : lifeValue?.summary.daysLived ?? 0,
+                          height: 54,
+                          color: theme.ink,
+                          dim: statusColor,
+                        ),
+                        const SizedBox(height: 14),
+                        _StatusChip(label: status, color: statusColor),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      _VerticalRuler(
+                        value: preferences.duaEnabled
+                            ? rate
+                            : lifeValue?.summary.percentLived ?? 0,
+                        height: 86,
+                        color: statusColor,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        '${preferences.duaEnabled ? percentage : ((lifeValue?.summary.percentLived ?? 0) * 100).round()}%',
+                        style: NocturneType.title(theme.ink)
+                            .copyWith(fontSize: 22),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        preferences.duaEnabled ? 'RECITED' : 'LIVED',
+                        style: NocturneType.label(theme.faint),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: NocturneSpace.x5),
+              _DuaSparkline(library: libraryValue),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: _DashboardStatTile(
+                value: '$collected',
+                label: 'duas collected',
+                detail: 'of $assigned',
+                color: theme.kept,
+                onTap: preferences.duaEnabled ? onOpenLibrary : null,
+                semanticLabel: 'View dua collection',
+              ),
+            ),
+            const SizedBox(width: NocturneSpace.x3),
+            Expanded(
+              child: _PrayerDayTile(
+                dashboard: lifeValue,
+                loading: lifeDashboard?.isLoading ?? false,
+                onTap: preferences.lifeInDotsEnabled ? onOpenLife : null,
+              ),
+            ),
+          ],
+        ),
+        if (preferences.lifeInDotsEnabled) ...<Widget>[
+          const SizedBox(height: NocturneSpace.x3),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: _DashboardStatTile(
+                  value: lifeValue == null
+                      ? '—'
+                      : '${(lifeValue.summary.percentLived * 100).toStringAsFixed(1)}%',
+                  label: 'life elapsed',
+                  detail: lifeValue == null
+                      ? 'loading'
+                      : '${lifeValue.summary.daysRemaining} days remain',
+                  color: theme.blue,
+                  onTap: onOpenLife,
+                  semanticLabel: 'View life progress',
+                ),
+              ),
+              const SizedBox(width: NocturneSpace.x3),
+              Expanded(child: _LifeWeekCard(dashboard: lifeValue)),
+            ],
+          ),
+        ],
+        const SizedBox(height: NocturneSpace.x5),
+        Row(
+          children: <Widget>[
+            if (preferences.duaEnabled) ...<Widget>[
+              CircleAction(
+                glyph: NocturneGlyph.calendar,
+                onTap: onOpenLibrary,
+                semanticLabel: 'Open dua history',
+                size: 48,
+              ),
+              const SizedBox(width: NocturneSpace.x3),
+            ],
+            Expanded(
+              child: preferences.duaEnabled
+                  ? NocturneButton(
+                      label: recited ? 'Recited today' : 'Mark as recited',
+                      trailing: NocturneGlyph.check,
+                      style: recited
+                          ? NocturneButtonStyle.glass
+                          : NocturneButtonStyle.signal,
+                      onTap: onMarkRecited,
+                    )
+                  : NocturneButton(
+                      label: 'View your life',
+                      semanticLabel: 'Open Life dashboard',
+                      trailing: NocturneGlyph.arrowRight,
+                      onTap: onOpenLife,
+                    ),
+            ),
+            if (preferences.lifeInDotsEnabled &&
+                preferences.duaEnabled) ...<Widget>[
+              const SizedBox(width: NocturneSpace.x3),
+              CircleAction(
+                glyph: NocturneGlyph.dots,
+                onTap: onOpenLife,
+                semanticLabel: 'Open Life dashboard',
+                foreground: theme.accent,
+                size: 48,
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  static String _headline(TodayDuaState? state) => switch (state) {
+    TodayDuaNeedsKey() => 'The key is\nmissing.',
+    TodayDuaFlagged() => 'Hidden for\nreview.',
+    TodayDuaUnavailable() => 'The day is\nwaiting.',
+    TodayDuaDisabled() => 'A life in\ndays.',
+    _ => 'A prayer for\ntoday.',
+  };
+
+  static String _duaStatus(TodayDuaState? state, bool loading) {
+    if (loading) return 'Preparing today';
+    return switch (state) {
+      TodayDuaReady(:final dua) =>
+        dua.isRecited ? 'Kept today' : 'Today is open',
+      TodayDuaNeedsKey() => 'API key needed',
+      TodayDuaFlagged() => 'Hidden locally',
+      TodayDuaUnavailable() => 'Try again',
+      TodayDuaDisabled() => 'Life tracking',
+      null => 'Loading locally',
+    };
+  }
+
+  static String _clock(int hour, int minute) =>
+      '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(NocturneRadius.pill),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            DecoratedBox(
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              child: const SizedBox.square(dimension: 5),
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: NocturneType.label(color).copyWith(letterSpacing: 1.2),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardStatTile extends StatelessWidget {
+  const _DashboardStatTile({
+    required this.value,
+    required this.label,
+    required this.detail,
+    required this.color,
+    required this.onTap,
+    required this.semanticLabel,
+  });
+
+  final String value;
+  final String label;
+  final String detail;
+  final Color color;
+  final VoidCallback? onTap;
+  final String semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = NocturneScope.of(context);
+    return GlassCard(
+      radius: NocturneRadius.medium,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      onTap: onTap,
+      semanticLabel: semanticLabel,
+      child: SizedBox(
+        height: 82,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const SizedBox.square(dimension: 6),
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    label.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: NocturneType.label(theme.muted),
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: NocturneType.title(theme.ink).copyWith(fontSize: 30),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: NocturneType.mono(theme.faint, size: 9),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PrayerDayTile extends StatelessWidget {
+  const _PrayerDayTile({
+    required this.dashboard,
+    required this.loading,
+    required this.onTap,
+  });
+
+  final LifeDashboard? dashboard;
+  final bool loading;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = NocturneScope.of(context);
+    final entry = dashboard?.todayEntry;
+    final color = switch (entry?.status) {
+      PrayerDayStatus.completed => theme.kept,
+      PrayerDayStatus.missed => theme.missed,
+      null => theme.pending,
+    };
+    final status = loading
+        ? 'Loading'
+        : switch (entry?.status) {
+            PrayerDayStatus.completed => 'Complete',
+            PrayerDayStatus.missed => 'Missed',
+            null => 'Open',
+          };
+    final detail = dashboard == null
+        ? 'Life disabled'
+        : '${dashboard!.summary.outstandingDebts} make-up';
+    return _DashboardStatTile(
+      value: status,
+      label: 'prayer day',
+      detail: detail,
+      color: color,
+      onTap: onTap,
+      semanticLabel: 'Open prayer reflection',
+    );
+  }
+}
+
+class _LifeWeekCard extends StatelessWidget {
+  const _LifeWeekCard({required this.dashboard});
+
+  final LifeDashboard? dashboard;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = NocturneScope.of(context);
+    final today = dashboard?.today ?? DateTime.now();
+    final byDay = <String, PrayerDay>{
+      for (final entry in dashboard?.prayerDays ?? const <PrayerDay>[])
+        _dayKey(entry.day): entry,
+    };
+    return GlassCard(
+      radius: NocturneRadius.medium,
+      padding: const EdgeInsets.fromLTRB(10, 12, 10, 10),
+      child: SizedBox(
+        height: 90,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Text('THIS WEEK', style: NocturneType.label(theme.muted)),
+            ),
+            const Spacer(),
+            Row(
+              children: <Widget>[
+                for (var offset = 6; offset >= 0; offset--)
+                  Expanded(
+                    child: _WeekDay(
+                      date: DateTime(
+                        today.year,
+                        today.month,
+                        today.day - offset,
+                      ),
+                      entry:
+                          byDay[_dayKey(
+                            DateTime(
+                              today.year,
+                              today.month,
+                              today.day - offset,
+                            ),
+                          )],
+                      isToday: offset == 0,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WeekDay extends StatelessWidget {
+  const _WeekDay({
+    required this.date,
+    required this.entry,
+    required this.isToday,
+  });
+
+  final DateTime date;
+  final PrayerDay? entry;
+  final bool isToday;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = NocturneScope.of(context);
+    const initials = <String>['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final color = switch (entry?.status) {
+      PrayerDayStatus.completed => theme.kept,
+      PrayerDayStatus.missed => theme.missed,
+      null => theme.faint,
+    };
+    return Column(
+      children: <Widget>[
+        Text(
+          initials[date.weekday - 1],
+          style: NocturneType.label(theme.faint),
+        ),
+        const SizedBox(height: 7),
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: entry == null ? color.withValues(alpha: 0.12) : color,
+            border: Border.all(
+              color: isToday ? theme.ink : color.withValues(alpha: 0.5),
+              width: isToday ? 1.5 : 1,
+            ),
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          '${date.day}',
+          style: NocturneType.mono(isToday ? theme.ink : theme.faint, size: 9),
+        ),
+      ],
+    );
+  }
+}
+
+class _DuaSparkline extends StatelessWidget {
+  const _DuaSparkline({required this.library});
+
+  final DuaLibrary? library;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = NocturneScope.of(context);
+    final today = library?.today ?? DateTime.now();
+    return SizedBox(
+      height: 34,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: <Widget>[
+          for (var offset = 6; offset >= 0; offset--)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2.5),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Builder(
+                    builder: (context) {
+                      final date = DateTime(
+                        today.year,
+                        today.month,
+                        today.day - offset,
+                      );
+                      final dua = library?.assignedTo(date);
+                      final recited = dua?.isRecited ?? false;
+                      final missed = dua != null && !recited && offset > 0;
+                      final color = recited
+                          ? theme.kept
+                          : missed
+                          ? theme.missed
+                          : theme.pending;
+                      return AnimatedContainer(
+                        duration: NocturneDuration.base,
+                        height: recited
+                            ? 34
+                            : missed
+                            ? 18
+                            : offset == 0
+                            ? 11
+                            : 5,
+                        decoration: BoxDecoration(
+                          color: color.withValues(
+                            alpha: recited || missed ? 0.85 : 0.16,
+                          ),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VerticalRuler extends StatelessWidget {
+  const _VerticalRuler({
+    required this.value,
+    required this.height,
+    required this.color,
+  });
+
+  final double value;
+  final double height;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 26,
+    height: height,
+    child: CustomPaint(
+      painter: _VerticalRulerPainter(value: value.clamp(0, 1), color: color),
+    ),
+  );
+}
+
+class _VerticalRulerPainter extends CustomPainter {
+  const _VerticalRulerPainter({required this.value, required this.color});
+
+  final double value;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const ticks = 28;
+    final x = size.width - 1;
+    for (var index = 0; index <= ticks; index++) {
+      final fraction = index / ticks;
+      final y = size.height * (1 - fraction);
+      final major = index % 4 == 0;
+      canvas.drawLine(
+        Offset(x - (major ? size.width * 0.72 : size.width * 0.4), y),
+        Offset(x, y),
+        Paint()
+          ..color = fraction <= value ? color : color.withValues(alpha: 0.16)
+          ..strokeWidth = major ? 1.4 : 1
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+    final markerY = size.height * (1 - value);
+    canvas.drawLine(
+      Offset(0, markerY),
+      Offset(size.width, markerY),
+      Paint()
+        ..color = color
+        ..strokeWidth = 1.6,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_VerticalRulerPainter oldDelegate) =>
+      oldDelegate.value != value || oldDelegate.color != color;
+}
+
+class _DotMatrixNumber extends StatelessWidget {
+  const _DotMatrixNumber(
+    this.value, {
+    required this.height,
+    required this.color,
+    required this.dim,
+  });
+
+  final int value;
+  final double height;
+  final Color color;
+  final Color dim;
+
+  @override
+  Widget build(BuildContext context) {
+    final digits = value.abs().toString();
+    final cell = height / 7;
+    return Semantics(
+      label: '$value',
+      child: SizedBox(
+        width: digits.length * 5 * cell + (digits.length - 1) * cell * 1.25,
+        height: height,
+        child: CustomPaint(
+          painter: _DotMatrixPainter(value: value, color: color, dim: dim),
+        ),
+      ),
+    );
+  }
+}
+
+class _DotMatrixPainter extends CustomPainter {
+  const _DotMatrixPainter({
+    required this.value,
+    required this.color,
+    required this.dim,
+  });
+
+  final int value;
+  final Color color;
+  final Color dim;
+
+  static const Map<String, List<int>> _glyphs = <String, List<int>>{
+    '0': <int>[0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E],
+    '1': <int>[0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E],
+    '2': <int>[0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F],
+    '3': <int>[0x1F, 0x02, 0x04, 0x02, 0x01, 0x11, 0x0E],
+    '4': <int>[0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02],
+    '5': <int>[0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E],
+    '6': <int>[0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E],
+    '7': <int>[0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08],
+    '8': <int>[0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E],
+    '9': <int>[0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C],
+  };
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cell = size.height / 7;
+    var x = 0.0;
+    for (final digit in value.abs().toString().split('')) {
+      final glyph = _glyphs[digit]!;
+      for (var row = 0; row < 7; row++) {
+        for (var column = 0; column < 5; column++) {
+          final on = (glyph[row] & (1 << (4 - column))) != 0;
+          canvas.drawCircle(
+            Offset(x + column * cell + cell / 2, row * cell + cell / 2),
+            cell * (on ? 0.32 : 0.2),
+            Paint()..color = on ? color : dim.withValues(alpha: 0.075),
+          );
+        }
+      }
+      x += cell * 6.25;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DotMatrixPainter oldDelegate) =>
+      oldDelegate.value != value ||
+      oldDelegate.color != color ||
+      oldDelegate.dim != dim;
+}
+
+String _dayKey(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
 
 class _DuaStateView extends StatelessWidget {
   const _DuaStateView({
     required this.state,
     required this.onRetry,
     required this.onOpenSettings,
-    required this.onMarkRecited,
     required this.onReportIssue,
   });
 
   final TodayDuaState state;
   final VoidCallback onRetry;
   final VoidCallback onOpenSettings;
-  final VoidCallback onMarkRecited;
   final VoidCallback onReportIssue;
 
   @override
@@ -242,10 +1005,8 @@ class _DuaStateView extends StatelessWidget {
         rejected: rejected,
         onOpenSettings: onOpenSettings,
       ),
-      TodayDuaReady(:final dua, :final canMarkRecited) => _ReadyDua(
+      TodayDuaReady(:final dua) => _ReadyDua(
         dua: dua,
-        canMarkRecited: canMarkRecited,
-        onMarkRecited: onMarkRecited,
         onReportIssue: onReportIssue,
       ),
       TodayDuaFlagged() => const _FlaggedDua(),
@@ -266,8 +1027,8 @@ class _LoadingDua extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text('Preparing the\nday.', style: NocturneType.hero(theme.ink)),
-        const SizedBox(height: NocturneSpace.x4),
+        const _SectionRule(index: '01', label: 'Today’s dua · preparing'),
+        const SizedBox(height: NocturneSpace.x3),
         Text(
           'Checking local history, source requirements and today’s language.',
           style: NocturneType.body(theme.muted),
@@ -307,8 +1068,8 @@ class _NeedsKeyDua extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text('The key is\nmissing.', style: NocturneType.hero(theme.ink)),
-        const SizedBox(height: NocturneSpace.x4),
+        const _SectionRule(index: '01', label: 'Gemini connection'),
+        const SizedBox(height: NocturneSpace.x3),
         Text(
           rejected
               ? 'Gemini no longer accepts the saved key. Replace or remove it in Settings.'
@@ -338,8 +1099,8 @@ class _UnavailableDua extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text('The day is\nwaiting.', style: NocturneType.hero(theme.ink)),
-        const SizedBox(height: NocturneSpace.x4),
+        const _SectionRule(index: '01', label: 'Today’s dua · waiting'),
+        const SizedBox(height: NocturneSpace.x3),
         Text(message, style: NocturneType.body(theme.muted)),
         if (onRetry != null) ...<Widget>[
           const SizedBox(height: NocturneSpace.x6),
@@ -356,16 +1117,9 @@ class _UnavailableDua extends StatelessWidget {
 }
 
 class _ReadyDua extends StatelessWidget {
-  const _ReadyDua({
-    required this.dua,
-    required this.canMarkRecited,
-    required this.onMarkRecited,
-    required this.onReportIssue,
-  });
+  const _ReadyDua({required this.dua, required this.onReportIssue});
 
   final Dua dua;
-  final bool canMarkRecited;
-  final VoidCallback onMarkRecited;
   final VoidCallback onReportIssue;
 
   @override
@@ -374,24 +1128,13 @@ class _ReadyDua extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Row(
-          children: <Widget>[
-            Text('TODAY’S DUA', style: NocturneType.label(theme.accent)),
-            const Spacer(),
-            Text(
-              dua.isRecited ? 'RECITED' : 'READY',
-              style: NocturneType.label(
-                dua.isRecited ? theme.kept : theme.pending,
-              ),
-            ),
-          ],
+        _SectionRule(
+          index: '01',
+          label: dua.isRecited
+              ? 'Today’s dua · recited'
+              : 'Today’s dua · ready',
         ),
         const SizedBox(height: NocturneSpace.x3),
-        Text(
-          dua.isRecited ? 'Held for\ntoday.' : 'A prayer for\ntoday.',
-          style: NocturneType.hero(theme.ink),
-        ),
-        const SizedBox(height: NocturneSpace.x6),
         GlassCard(
           glow: true,
           tint: dua.isRecited ? theme.kept : theme.pending,
@@ -442,11 +1185,11 @@ class _ReadyDua extends StatelessWidget {
           ),
         ),
         const SizedBox(height: NocturneSpace.x5),
-        const _SectionRule(index: '01', label: 'Context'),
+        const _SectionRule(index: '02', label: 'Context'),
         const SizedBox(height: NocturneSpace.x3),
         Text(dua.benefits, style: NocturneType.body(theme.muted)),
         const SizedBox(height: NocturneSpace.x6),
-        const _SectionRule(index: '02', label: 'Sources'),
+        const _SectionRule(index: '03', label: 'Sources'),
         const SizedBox(height: NocturneSpace.x3),
         for (var index = 0; index < dua.sources.length; index++) ...<Widget>[
           _SourceRow(
@@ -473,19 +1216,6 @@ class _ReadyDua extends StatelessWidget {
               ),
             ],
           ),
-        ),
-        const SizedBox(height: NocturneSpace.x5),
-        NocturneButton(
-          label: dua.isRecited
-              ? 'Recited today'
-              : canMarkRecited
-              ? 'Mark as recited'
-              : 'Return to today to recite',
-          style: dua.isRecited || !canMarkRecited
-              ? NocturneButtonStyle.glass
-              : NocturneButtonStyle.signal,
-          trailing: NocturneGlyph.check,
-          onTap: dua.isRecited || !canMarkRecited ? null : onMarkRecited,
         ),
         const SizedBox(height: NocturneSpace.x2),
         Align(
@@ -528,8 +1258,8 @@ class _FlaggedDua extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text('Hidden for\nreview.', style: NocturneType.hero(theme.ink)),
-        const SizedBox(height: NocturneSpace.x4),
+        const _SectionRule(index: '01', label: 'Today’s dua · hidden'),
+        const SizedBox(height: NocturneSpace.x3),
         Text(
           'This dua was flagged locally and will remain excluded from future daily generation.',
           style: NocturneType.body(theme.muted),
@@ -613,67 +1343,6 @@ class _SourceRow extends StatelessWidget {
   }
 }
 
-class _LibraryPreview extends StatelessWidget {
-  const _LibraryPreview({required this.library, required this.onTap});
-
-  final AsyncValue<DuaLibrary> library;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = NocturneScope.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const _SectionRule(index: '03', label: 'Streak & collection'),
-        const SizedBox(height: NocturneSpace.x3),
-        GlassCard(
-          onTap: onTap,
-          semanticLabel: 'Open dua history and collection',
-          tint: theme.kept,
-          child: library.when(
-            data: (value) => Row(
-              children: <Widget>[
-                Expanded(
-                  child: _PreviewStat(
-                    value: '${value.stats.current}',
-                    label: 'CURRENT',
-                  ),
-                ),
-                Expanded(
-                  child: _PreviewStat(
-                    value: '${value.stats.longest}',
-                    label: 'LONGEST',
-                  ),
-                ),
-                Expanded(
-                  child: _PreviewStat(
-                    value: '${value.stats.totalCollected}',
-                    label: 'COLLECTED',
-                  ),
-                ),
-                NocturneIcon(
-                  NocturneGlyph.arrowRight,
-                  size: 18,
-                  color: theme.faint,
-                ),
-              ],
-            ),
-            error: (error, stackTrace) => Text(
-              'Open the library to retry local history.',
-              style: NocturneType.body(theme.muted),
-            ),
-            loading: () => Text(
-              'READING LOCAL HISTORY…',
-              style: NocturneType.label(theme.muted),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _PreviewStat extends StatelessWidget {
   const _PreviewStat({required this.value, required this.label});
 
@@ -702,8 +1371,8 @@ class _LifeOnlyHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text('A life in\ndays.', style: NocturneType.hero(theme.ink)),
-        const SizedBox(height: NocturneSpace.x4),
+        const _SectionRule(index: '01', label: 'Daily reflection'),
+        const SizedBox(height: NocturneSpace.x3),
         Text(
           'Your private prayer reflection is ready for its first daily check-in.',
           style: NocturneType.body(theme.muted),
@@ -714,8 +1383,9 @@ class _LifeOnlyHeader extends StatelessWidget {
 }
 
 class _LifePreview extends StatelessWidget {
-  const _LifePreview({required this.onTap});
+  const _LifePreview({required this.dashboard, required this.onTap});
 
+  final AsyncValue<LifeDashboard> dashboard;
   final VoidCallback onTap;
 
   @override
@@ -728,33 +1398,69 @@ class _LifePreview extends StatelessWidget {
         const SizedBox(height: NocturneSpace.x3),
         GlassCard(
           onTap: onTap,
-          semanticLabel: 'Open Life in Dots',
-          child: Row(
-            children: <Widget>[
-              NocturneIcon(NocturneGlyph.dots, color: theme.ink),
-              const SizedBox(width: NocturneSpace.x4),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          semanticLabel: 'View the 100-year Life in Dots',
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+          child: dashboard.when(
+            data: (value) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
                   children: <Widget>[
                     Text(
-                      'Open your 100-year view',
-                      style: NocturneType.bodyStrong(theme.ink),
+                      'THE 100-YEAR VIEW',
+                      style: NocturneType.label(theme.muted),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Zoom the dots, check in today, and track your personal make-up practice.',
-                      style: NocturneType.caption(theme.muted),
+                    const Spacer(),
+                    NocturneIcon(
+                      NocturneGlyph.arrowRight,
+                      size: 18,
+                      color: theme.faint,
                     ),
                   ],
                 ),
-              ),
-              NocturneIcon(
-                NocturneGlyph.arrowRight,
-                size: 18,
-                color: theme.faint,
-              ),
-            ],
+                const SizedBox(height: NocturneSpace.x3),
+                Text(
+                  value.todayEntry == null
+                      ? 'Today is waiting for your reflection.'
+                      : value.todayEntry!.status == PrayerDayStatus.completed
+                      ? 'Today’s five prayers are recorded complete.'
+                      : 'Today is recorded with missed prayers.',
+                  style: NocturneType.cardTitle(theme.ink)
+                      .copyWith(height: 1.25),
+                ),
+                const SizedBox(height: NocturneSpace.x4),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: _PreviewStat(
+                        value: '${value.summary.daysLived}',
+                        label: 'DAYS LIVED',
+                      ),
+                    ),
+                    Expanded(
+                      child: _PreviewStat(
+                        value: '${value.summary.completedDays}',
+                        label: 'COMPLETE',
+                      ),
+                    ),
+                    Expanded(
+                      child: _PreviewStat(
+                        value: '${value.summary.outstandingDebts}',
+                        label: 'MAKE-UP',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            loading: () => Text(
+              'READING YOUR PRIVATE LIFE VIEW…',
+              style: NocturneType.label(theme.muted),
+            ),
+            error: (error, stackTrace) => Text(
+              'Open Life in Dots to retry local records.',
+              style: NocturneType.body(theme.muted),
+            ),
           ),
         ),
       ],

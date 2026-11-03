@@ -8,6 +8,39 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('opens with today visible in the virtualized scrollable grid', (
+    tester,
+  ) async {
+    final start = DateTime(2025, 1, 1);
+    final days = <LifeDot>[
+      for (var index = 0; index < 800; index++)
+        LifeDot(
+          date: DateTime(start.year, start.month, start.day + index),
+          state: index > 600 ? LifeDotState.remaining : LifeDotState.unrecorded,
+          isToday: index == 600,
+          estimated: false,
+        ),
+    ];
+
+    await tester.pumpWidget(
+      _Harness(
+        child: LifeDotsView(
+          years: <LifeYear>[LifeYear(age: 0, days: days)],
+          selectedDate: days[600].date,
+          onSelected: (_) {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('life-dot-today')), findsOneWidget);
+    expect(find.byType(GridView), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('life-dot-today'))).width,
+      greaterThanOrEqualTo(20),
+    );
+  });
+
   testWidgets('selects adjacent days with keyboard and semantics actions', (
     tester,
   ) async {

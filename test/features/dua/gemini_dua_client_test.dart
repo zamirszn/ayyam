@@ -83,6 +83,53 @@ void main() {
     expect(generationCalls, 2);
   });
 
+  test('falls back to another listed model after a 503', () async {
+    var generationCalls = 0;
+    final client = GeminiDuaClient(
+      client: MockClient((request) async {
+        if (request.method == 'GET') {
+          return http.Response(
+            jsonEncode(
+              _modelList(<String>[
+                'gemini-3.8-flash',
+                'gemini-3-flash',
+                'gemini-2.5-flash',
+              ]),
+            ),
+            200,
+          );
+        }
+        generationCalls++;
+        if (request.url.path.contains('gemini-2.5-flash')) {
+          return http.Response(
+            jsonEncode(<String, Object?>{
+              'error': <String, Object?>{
+                'message': 'The model is temporarily overloaded.',
+              },
+            }),
+            503,
+          );
+        }
+        expect(
+          request.url.path,
+          '/v1beta/models/gemini-3.8-flash:generateContent',
+        );
+        return _generationResponse();
+      }),
+    );
+
+    final result = await client.generate(
+      apiKey: 'test-key',
+      language: 'English',
+      exclusionHints: const <String>[],
+      category: 'guidance',
+      attempt: 0,
+    );
+
+    expect(result.arabic, 'رَبِّ زِدْنِي عِلْمًا');
+    expect(generationCalls, 2);
+  });
+
   test('maps authentication failures without exposing the key', () async {
     final client = GeminiDuaClient(
       client: MockClient(

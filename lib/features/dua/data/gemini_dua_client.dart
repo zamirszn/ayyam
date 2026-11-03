@@ -90,24 +90,25 @@ class GeminiDuaClient implements DuaGeneratorClient {
       },
     });
 
-    final model = _resolvedModel ?? await _discoverModel(normalizedKey);
-    _resolvedModel = model;
-    var response = await _postGeneration(
-      apiKey: normalizedKey,
-      model: model,
-      body: body,
-    );
-    if (response.statusCode == 404) {
-      final fallback = await _discoverModel(
-        normalizedKey,
-        excluded: <String>{model},
-      );
-      _resolvedModel = fallback;
+    final excludedModels = <String>{};
+    var model = _resolvedModel ?? await _discoverModel(normalizedKey);
+    late http.Response response;
+    for (var modelAttempt = 0; modelAttempt < 3; modelAttempt++) {
+      _resolvedModel = model;
       response = await _postGeneration(
         apiKey: normalizedKey,
-        model: fallback,
+        model: model,
         body: body,
       );
+      if (response.statusCode == 200 || !_shouldTryAnotherModel(response)) {
+        break;
+      }
+      excludedModels.add(model);
+      try {
+        model = await _discoverModel(normalizedKey, excluded: excludedModels);
+      } on DuaGenerationException {
+        break;
+      }
     }
 
     if (response.statusCode != 200) {
@@ -307,6 +308,11 @@ class GeminiDuaClient implements DuaGeneratorClient {
       DuaGenerationError.unavailable,
       message ?? 'Gemini is temporarily unavailable.',
     );
+  }
+
+  bool _shouldTryAnotherModel(http.Response response) {
+    return response.statusCode == 404 ||
+        <int>{500, 502, 503, 504}.contains(response.statusCode);
   }
 
   String? _errorMessage(String body) {

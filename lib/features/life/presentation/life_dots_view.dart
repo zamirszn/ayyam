@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:ayyam/design/theme/nocturne_theme.dart';
+import 'package:ayyam/design/type/nocturne_type.dart';
 import 'package:ayyam/features/life/domain/prayer_day.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -20,32 +23,42 @@ class LifeDotsView extends StatefulWidget {
 }
 
 class _LifeDotsViewState extends State<LifeDotsView> {
-  static const double _horizontalGap = 2.3;
-  static const double _verticalGap = 5;
-  static const double _padding = 10;
-  static const double _canvasWidth = 366 * _horizontalGap + (_padding * 2);
-  static const double _canvasHeight = 100 * _verticalGap + (_padding * 2);
+  static const int _columns = 7;
+  static const double _rowExtent = 27;
+  static const double _viewportHeight = 350;
+  static const double _dotSize = 14;
 
-  late final TransformationController _transformController;
+  late List<LifeDot> _days;
+  late ScrollController _scrollController;
   bool _focused = false;
 
   @override
   void initState() {
     super.initState();
-    _transformController = TransformationController(
-      Matrix4.diagonal3Values(0.42, 0.42, 1),
+    _days = _flatten(widget.years);
+    _scrollController = ScrollController(
+      initialScrollOffset: _initialOffset(_days),
     );
   }
 
   @override
+  void didUpdateWidget(LifeDotsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.years, widget.years)) {
+      _days = _flatten(widget.years);
+    }
+  }
+
+  @override
   void dispose() {
-    _transformController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final selectedDot = _selectionForSemantics();
+    final theme = NocturneScope.of(context);
     return Semantics(
       container: true,
       focusable: true,
@@ -58,7 +71,7 @@ class _LifeDotsViewState extends State<LifeDotsView> {
       decreasedValue: selectedDot == null
           ? null
           : _describeDot(_adjacentSelection(-1) ?? selectedDot),
-      hint: 'Pinch to zoom, tap a dot, or use left and right arrow keys to choose a day.',
+      hint: 'Scroll vertically, tap a dot, or use arrow keys to choose a day. Press Home to return to today.',
       onIncrease: () => _moveSelection(1),
       onDecrease: () => _moveSelection(-1),
       child: FocusableActionDetector(
@@ -69,6 +82,9 @@ class _LifeDotsViewState extends State<LifeDotsView> {
         shortcuts: const <ShortcutActivator, Intent>{
           SingleActivator(LogicalKeyboardKey.arrowRight): _MoveDayIntent(1),
           SingleActivator(LogicalKeyboardKey.arrowLeft): _MoveDayIntent(-1),
+          SingleActivator(LogicalKeyboardKey.arrowDown): _MoveDayIntent(7),
+          SingleActivator(LogicalKeyboardKey.arrowUp): _MoveDayIntent(-7),
+          SingleActivator(LogicalKeyboardKey.home): _TodayIntent(),
         },
         actions: <Type, Action<Intent>>{
           _MoveDayIntent: CallbackAction<_MoveDayIntent>(
@@ -77,41 +93,83 @@ class _LifeDotsViewState extends State<LifeDotsView> {
               return null;
             },
           ),
+          _TodayIntent: CallbackAction<_TodayIntent>(
+            onInvoke: (_) {
+              _selectToday();
+              return null;
+            },
+          ),
         },
         child: DecoratedBox(
           position: DecorationPosition.foreground,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            border: _focused
-                ? Border.all(color: NocturneScope.of(context).accent, width: 2)
-                : null,
+            border: _focused ? Border.all(color: theme.accent, width: 2) : null,
           ),
-          child: SizedBox(
-            height: 260,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: InteractiveViewer(
-                transformationController: _transformController,
-                constrained: false,
-                minScale: 0.32,
-                maxScale: 5,
-                boundaryMargin: const EdgeInsets.all(120),
-                alignment: Alignment.topLeft,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapUp: (details) => _selectAt(details.localPosition),
-                  child: SizedBox(
-                    width: _canvasWidth,
-                    height: _canvasHeight,
-                    child: CustomPaint(
-                      painter: _LifeDotsPainter(
-                        years: widget.years,
-                        selectedDate: widget.selectedDate,
-                        theme: NocturneScope.of(context),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: SizedBox(
+              height: _viewportHeight,
+              child: Stack(
+                children: <Widget>[
+                  Positioned.fill(
+                    child: GridView.builder(
+                      key: const ValueKey('life-dots-grid'),
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(12, 16, 12, 18),
+                      physics: const ClampingScrollPhysics(),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: _columns,
+                            mainAxisExtent: _rowExtent,
+                            crossAxisSpacing: 3,
+                          ),
+                      itemCount: _days.length,
+                      itemBuilder: (context, index) {
+                        final dot = _days[index];
+                        return _LifeDotCell(
+                          key: dot.isToday
+                              ? const ValueKey('life-dot-today')
+                              : null,
+                          dot: dot,
+                          selected:
+                              widget.selectedDate != null &&
+                              _sameDay(dot.date, widget.selectedDate!),
+                          onTap: () => widget.onSelected(dot),
+                        );
+                      },
+                    ),
+                  ),
+                  Positioned(
+                    right: 10,
+                    bottom: 10,
+                    child: Semantics(
+                      button: true,
+                      label: 'Jump to today',
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _selectToday,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: theme.canvas.withValues(alpha: 0.92),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: theme.lineStrong),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            child: Text(
+                              'TODAY',
+                              style: NocturneType.label(theme.accent),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
@@ -120,53 +178,126 @@ class _LifeDotsViewState extends State<LifeDotsView> {
     );
   }
 
-  void _selectAt(Offset position) {
-    final row = ((position.dy - _padding) / _verticalGap).round();
-    final column = ((position.dx - _padding) / _horizontalGap).round();
-    if (row < 0 || row >= widget.years.length) return;
-    final days = widget.years[row].days;
-    if (column < 0 || column >= days.length) return;
-    widget.onSelected(days[column]);
+  void _selectToday() {
+    final index = _days.indexWhere((dot) => dot.isToday);
+    if (index < 0) return;
+    widget.onSelected(_days[index]);
+    _scrollToIndex(index);
+  }
+
+  void _moveSelection(int delta) {
+    final current = _selectionForSemantics();
+    if (current == null) return;
+    final currentIndex = _days.indexWhere(
+      (dot) => _sameDay(dot.date, current.date),
+    );
+    if (currentIndex < 0) return;
+    final nextIndex = (currentIndex + delta).clamp(0, _days.length - 1);
+    widget.onSelected(_days[nextIndex]);
+    _scrollToIndex(nextIndex);
+  }
+
+  void _scrollToIndex(int index) {
+    if (!_scrollController.hasClients) return;
+    final row = index ~/ _columns;
+    final target = row * _rowExtent - (_viewportHeight * 0.68);
+    _scrollController.animateTo(
+      target.clamp(0, _scrollController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   LifeDot? _selectionForSemantics() {
     final selectedDate = widget.selectedDate;
-    LifeDot? first;
-    LifeDot? today;
-    for (final year in widget.years) {
-      for (final dot in year.days) {
-        first ??= dot;
-        if (selectedDate != null && _sameDay(dot.date, selectedDate)) {
-          return dot;
-        }
-        if (dot.isToday) today = dot;
+    if (selectedDate != null) {
+      for (final dot in _days) {
+        if (_sameDay(dot.date, selectedDate)) return dot;
       }
     }
-    return today ?? first;
-  }
-
-  void _moveSelection(int delta) {
-    final adjacent = _adjacentSelection(delta);
-    if (adjacent != null) widget.onSelected(adjacent);
+    for (final dot in _days) {
+      if (dot.isToday) return dot;
+    }
+    return _days.isEmpty ? null : _days.first;
   }
 
   LifeDot? _adjacentSelection(int delta) {
     final current = _selectionForSemantics();
     if (current == null) return null;
+    final index = _days.indexWhere((dot) => _sameDay(dot.date, current.date));
+    if (index < 0) return null;
+    final next = index + delta;
+    return next < 0 || next >= _days.length ? null : _days[next];
+  }
 
-    LifeDot? previous;
-    var selectNext = false;
-    for (final year in widget.years) {
-      for (final dot in year.days) {
-        if (selectNext) return dot;
-        if (_sameDay(dot.date, current.date)) {
-          if (delta < 0) return previous;
-          if (delta > 0) selectNext = true;
-        }
-        previous = dot;
-      }
-    }
-    return null;
+  static List<LifeDot> _flatten(List<LifeYear> years) =>
+      List<LifeDot>.unmodifiable(years.expand((year) => year.days));
+
+  static double _initialOffset(List<LifeDot> days) {
+    final todayIndex = days.indexWhere((dot) => dot.isToday);
+    if (todayIndex < 0) return 0;
+    final todayRow = todayIndex ~/ _columns;
+    return math.max(0, todayRow * _rowExtent - (_viewportHeight * 0.68));
+  }
+}
+
+class _LifeDotCell extends StatelessWidget {
+  const _LifeDotCell({
+    super.key,
+    required this.dot,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final LifeDot dot;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = NocturneScope.of(context);
+    final color = switch (dot.state) {
+      LifeDotState.unrecorded => theme.faint.withValues(alpha: 0.55),
+      LifeDotState.completed => theme.kept,
+      LifeDotState.missed => theme.missed,
+      LifeDotState.repaid => theme.blue,
+      LifeDotState.remaining => theme.faint.withValues(alpha: 0.18),
+    };
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: _describeDot(dot),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Center(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: dot.isToday || selected ? 20 : _LifeDotsViewState._dotSize,
+            height: dot.isToday || selected ? 20 : _LifeDotsViewState._dotSize,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: dot.isToday || selected
+                  ? Border.all(
+                      color: selected ? theme.ink : theme.accent,
+                      width: selected ? 2 : 1.5,
+                    )
+                  : null,
+            ),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: dot.estimated ? color.withValues(alpha: 0.65) : color,
+              ),
+              child: const SizedBox.square(
+                dimension: _LifeDotsViewState._dotSize,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -176,68 +307,8 @@ class _MoveDayIntent extends Intent {
   final int delta;
 }
 
-class _LifeDotsPainter extends CustomPainter {
-  const _LifeDotsPainter({
-    required this.years,
-    required this.selectedDate,
-    required this.theme,
-  });
-
-  static const double _horizontalGap = 2.3;
-  static const double _verticalGap = 5;
-  static const double _padding = 10;
-
-  final List<LifeYear> years;
-  final DateTime? selectedDate;
-  final NocturneThemeData theme;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final fill = Paint()..style = PaintingStyle.fill;
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.75;
-
-    for (var row = 0; row < years.length; row++) {
-      final days = years[row].days;
-      final y = _padding + row * _verticalGap;
-      for (var column = 0; column < days.length; column++) {
-        final dot = days[column];
-        final center = Offset(_padding + column * _horizontalGap, y);
-        fill.color = _colorFor(dot);
-        canvas.drawCircle(center, dot.estimated ? 0.7 : 0.82, fill);
-
-        if (dot.isToday) {
-          ring.color = theme.accent;
-          ring.strokeWidth = 0.9;
-          canvas.drawCircle(center, 1.65, ring);
-        }
-        if (selectedDate != null && _sameDay(dot.date, selectedDate!)) {
-          ring.color = theme.ink;
-          ring.strokeWidth = 0.75;
-          canvas.drawCircle(center, 2.25, ring);
-        }
-      }
-    }
-  }
-
-  Color _colorFor(LifeDot dot) {
-    final base = switch (dot.state) {
-      LifeDotState.unrecorded => theme.faint.withValues(alpha: 0.55),
-      LifeDotState.completed => theme.kept,
-      LifeDotState.missed => theme.missed,
-      LifeDotState.repaid => theme.blue,
-      LifeDotState.remaining => theme.faint.withValues(alpha: 0.18),
-    };
-    return dot.estimated ? base.withValues(alpha: 0.65) : base;
-  }
-
-  @override
-  bool shouldRepaint(_LifeDotsPainter oldDelegate) {
-    return oldDelegate.years != years ||
-        oldDelegate.selectedDate != selectedDate ||
-        oldDelegate.theme != theme;
-  }
+class _TodayIntent extends Intent {
+  const _TodayIntent();
 }
 
 bool _sameDay(DateTime a, DateTime b) =>
