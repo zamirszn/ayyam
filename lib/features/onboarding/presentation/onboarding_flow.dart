@@ -1,4 +1,5 @@
 import 'package:ayyam/core/gemini/gemini_key_validator.dart';
+import 'package:ayyam/core/platform/runtime_platform.dart';
 import 'package:ayyam/core/security/api_key_vault.dart';
 import 'package:ayyam/core/settings/app_preferences.dart';
 import 'package:ayyam/core/settings/app_preferences_controller.dart';
@@ -13,6 +14,7 @@ import 'package:ayyam/design/components/pressable.dart';
 import 'package:ayyam/design/theme/nocturne_theme.dart';
 import 'package:ayyam/design/tokens/nocturne_tokens.dart';
 import 'package:ayyam/design/type/nocturne_type.dart';
+import 'package:ayyam/features/dua/application/dua_reminder_platform.dart';
 import 'package:ayyam/features/onboarding/presentation/welcome_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -323,7 +325,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             body: isAndroid
                 ? 'Show the translation preview at your chosen time.'
                 : 'Used only where the browser supports local notifications.',
-            status: isAndroid ? 'ASK LATER' : 'BEST EFFORT',
+            status: isAndroid ? 'ASK ON FINISH' : 'BEST EFFORT',
           ),
           const SizedBox(height: NocturneSpace.x3),
           _PermissionCard(
@@ -332,7 +334,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             body: isAndroid
                 ? 'Keep the reminder punctual, including after a reboot.'
                 : 'Browsers cannot guarantee an exact background alarm.',
-            status: isAndroid ? 'ASK LATER' : 'NOT AVAILABLE',
+            status: isAndroid ? 'ASK ON FINISH' : 'NOT AVAILABLE',
           ),
           const SizedBox(height: NocturneSpace.x3),
           _PermissionCard(
@@ -502,6 +504,13 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     try {
       if (_duaEnabled) {
         await ref.read(apiKeyVaultProvider).write(_apiKeyController.text);
+        if (isAndroidRuntime) {
+          try {
+            await ref.read(duaReminderPlatformProvider).requestPermissions();
+          } catch (_) {
+            // Setup remains usable when Android declines a permission prompt.
+          }
+        }
       }
       final birthDate = _lifeEnabled ? _birthDate : null;
       final missedYears = _lifeEnabled

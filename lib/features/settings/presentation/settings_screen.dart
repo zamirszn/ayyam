@@ -1,4 +1,5 @@
 import 'package:ayyam/core/gemini/gemini_key_validator.dart';
+import 'package:ayyam/core/platform/runtime_platform.dart';
 import 'package:ayyam/core/security/api_key_vault.dart';
 import 'package:ayyam/core/settings/app_preferences.dart';
 import 'package:ayyam/core/settings/app_preferences_controller.dart';
@@ -13,6 +14,7 @@ import 'package:ayyam/design/components/pressable.dart';
 import 'package:ayyam/design/theme/nocturne_theme.dart';
 import 'package:ayyam/design/tokens/nocturne_tokens.dart';
 import 'package:ayyam/design/type/nocturne_type.dart';
+import 'package:ayyam/features/dua/application/dua_reminder_platform.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -51,6 +53,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _keyEdited = false;
   bool _testingKey = false;
   bool _saving = false;
+  bool _loadingDelivery = false;
+  ReminderDeliveryStatus? _deliveryStatus;
 
   @override
   void initState() {
@@ -69,6 +73,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           : '${_savedPreferences.missedPrayerYears}',
     );
     _restoreApiKey();
+    _refreshDeliveryStatus();
   }
 
   @override
@@ -94,6 +99,61 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _keyReadFailed = true;
       });
     }
+  }
+
+  Future<void> _refreshDeliveryStatus() async {
+    if (!isAndroidRuntime) return;
+    setState(() => _loadingDelivery = true);
+    try {
+      final status = await ref
+          .read(duaReminderPlatformProvider)
+          .deliveryStatus();
+      if (!mounted) return;
+      setState(() {
+        _deliveryStatus = status;
+        _loadingDelivery = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingDelivery = false);
+    }
+  }
+
+  Future<void> _requestReminderPermissions() async {
+    setState(() => _loadingDelivery = true);
+    try {
+      final status = await ref
+          .read(duaReminderPlatformProvider)
+          .requestPermissions();
+      if (!mounted) return;
+      setState(() {
+        _deliveryStatus = status;
+        _loadingDelivery = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingDelivery = false);
+    }
+  }
+
+  Future<void> _openBatteryOptimizationSettings() async {
+    try {
+      await ref
+          .read(duaReminderPlatformProvider)
+          .openBatteryOptimizationSettings();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _saveError = 'Could not open Android battery settings.');
+    }
+  }
+
+  String _deliveryLabel(bool? allowed) {
+    if (_loadingDelivery) return 'CHECKING';
+    return switch (allowed) {
+      true => 'ENABLED',
+      false => 'OFF',
+      null => 'NOT CHECKED',
+    };
   }
 
   @override
@@ -293,7 +353,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           subtitle: isAndroid
                               ? 'Permission will be requested with the reminder engine.'
                               : 'Browser delivery is best-effort; in-app content remains available.',
-                          status: isAndroid ? 'NOT REQUESTED' : 'BEST EFFORT',
+                          status: isAndroid
+                              ? _deliveryLabel(
+                                  _deliveryStatus?.notificationsAllowed,
+                                )
+                              : 'BEST EFFORT',
+                          onTap: isAndroidRuntime
+                              ? _requestReminderPermissions
+                              : null,
                         ),
                         const SizedBox(height: NocturneSpace.x2),
                         _StatusRow(
@@ -302,7 +369,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           subtitle: isAndroid
                               ? 'Used for punctual reminders after permission is granted.'
                               : 'Browsers cannot guarantee an exact background alarm.',
-                          status: isAndroid ? 'NOT REQUESTED' : 'UNAVAILABLE',
+                          status: isAndroid
+                              ? _deliveryLabel(
+                                  _deliveryStatus?.exactAlarmsAllowed,
+                                )
+                              : 'UNAVAILABLE',
+                          onTap: isAndroidRuntime
+                              ? _requestReminderPermissions
+                              : null,
                         ),
                         const SizedBox(height: NocturneSpace.x2),
                         _StatusRow(
@@ -311,7 +385,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           subtitle: isAndroid
                               ? 'Optional exemption for more reliable delivery.'
                               : 'No extra background access is requested on the web.',
-                          status: isAndroid ? 'OPTIONAL' : 'NOT NEEDED',
+                          status: isAndroid ? 'OPEN SETTINGS' : 'NOT NEEDED',
+                          onTap: isAndroidRuntime
+                              ? _openBatteryOptimizationSettings
+                              : null,
                         ),
                       ],
                       if (_lifeEnabled) ...<Widget>[
@@ -713,17 +790,20 @@ class _StatusRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.status,
+    this.onTap,
   });
 
   final NocturneGlyph glyph;
   final String title;
   final String subtitle;
   final String status;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = NocturneScope.of(context);
     return GlassCard(
+      onTap: onTap,
       radius: NocturneRadius.medium,
       padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
       child: Row(

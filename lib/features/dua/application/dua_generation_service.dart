@@ -26,14 +26,24 @@ class DuaPreparationException implements Exception {
   String toString() => 'DuaPreparationException($message)';
 }
 
-class DuaGenerationService {
-  DuaGenerationService({
+abstract interface class DuaPreparer {
+  Future<Dua> prepareForDate({
+    required DateTime date,
+    required String apiKey,
+    required String language,
+    DuaStatus status = DuaStatus.shown,
+    DateTime Function()? now,
+  });
+}
+
+class DuaGenerationService implements DuaPreparer {
+  factory DuaGenerationService({
     required DuaRepository repository,
     required DuaGeneratorClient client,
     required DuaValidator validator,
-  }) : _repository = repository,
-       _client = client,
-       _validator = validator;
+  }) => DuaGenerationService._(repository, client, validator);
+
+  DuaGenerationService._(this._repository, this._client, this._validator);
 
   final DuaRepository _repository;
   final DuaGeneratorClient _client;
@@ -47,6 +57,7 @@ class DuaGenerationService {
     'steadfastness',
   ];
 
+  @override
   Future<Dua> prepareForDate({
     required DateTime date,
     required String apiKey,
@@ -58,7 +69,7 @@ class DuaGenerationService {
     final existing = await _repository.findAssignedTo(assignedDate);
     if (existing != null) return existing;
 
-    final exclusions = await _repository.exclusionHints();
+    final exclusions = (await _repository.exclusionHints()).toList();
     final failures = <String>[];
 
     for (var attempt = 0; attempt < 5; attempt++) {

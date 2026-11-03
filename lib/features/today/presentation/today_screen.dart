@@ -8,6 +8,7 @@ import 'package:ayyam/design/routes/nocturne_page_route.dart';
 import 'package:ayyam/design/theme/nocturne_theme.dart';
 import 'package:ayyam/design/tokens/nocturne_tokens.dart';
 import 'package:ayyam/design/type/nocturne_type.dart';
+import 'package:ayyam/features/dua/application/dua_reminder_platform.dart';
 import 'package:ayyam/features/dua/application/today_dua_controller.dart';
 import 'package:ayyam/features/dua/domain/dua.dart';
 import 'package:ayyam/features/settings/presentation/settings_screen.dart';
@@ -22,6 +23,7 @@ class TodayScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final today = ref.watch(currentDateProvider);
+    final selectedDay = ref.watch(selectedDuaDayProvider);
     final duaState = preferences.duaEnabled
         ? ref.watch(todayDuaProvider)
         : null;
@@ -67,6 +69,21 @@ class TodayScreen extends ConsumerWidget {
                       _dateLabel(today),
                       style: NocturneType.label(theme.faint),
                     ),
+                    if (selectedDay != null) ...<Widget>[
+                      const SizedBox(height: NocturneSpace.x2),
+                      Pressable(
+                        onTap: () =>
+                            ref.read(selectedDuaDayProvider.notifier).clear(),
+                        semanticLabel: 'Return to today',
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'OPENED FROM REMINDER · RETURN TO TODAY',
+                            style: NocturneType.label(theme.accent),
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: NocturneSpace.x3),
                     if (duaState != null)
                       duaState.when(
@@ -161,8 +178,9 @@ class _DuaStateView extends StatelessWidget {
         rejected: rejected,
         onOpenSettings: onOpenSettings,
       ),
-      TodayDuaReady(:final dua) => _ReadyDua(
+      TodayDuaReady(:final dua, :final canMarkRecited) => _ReadyDua(
         dua: dua,
+        canMarkRecited: canMarkRecited,
         onMarkRecited: onMarkRecited,
         onReportIssue: onReportIssue,
       ),
@@ -276,11 +294,13 @@ class _UnavailableDua extends StatelessWidget {
 class _ReadyDua extends StatelessWidget {
   const _ReadyDua({
     required this.dua,
+    required this.canMarkRecited,
     required this.onMarkRecited,
     required this.onReportIssue,
   });
 
   final Dua dua;
+  final bool canMarkRecited;
   final VoidCallback onMarkRecited;
   final VoidCallback onReportIssue;
 
@@ -389,12 +409,16 @@ class _ReadyDua extends StatelessWidget {
         ),
         const SizedBox(height: NocturneSpace.x5),
         NocturneButton(
-          label: dua.isRecited ? 'Recited today' : 'Mark as recited',
-          style: dua.isRecited
+          label: dua.isRecited
+              ? 'Recited today'
+              : canMarkRecited
+              ? 'Mark as recited'
+              : 'Return to today to recite',
+          style: dua.isRecited || !canMarkRecited
               ? NocturneButtonStyle.glass
               : NocturneButtonStyle.signal,
           trailing: NocturneGlyph.check,
-          onTap: dua.isRecited ? null : onMarkRecited,
+          onTap: dua.isRecited || !canMarkRecited ? null : onMarkRecited,
         ),
         const SizedBox(height: NocturneSpace.x2),
         Align(

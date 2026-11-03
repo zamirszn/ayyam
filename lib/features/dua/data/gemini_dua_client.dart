@@ -40,10 +40,12 @@ abstract interface class DuaGeneratorClient {
 }
 
 class GeminiDuaClient implements DuaGeneratorClient {
-  GeminiDuaClient({
+  factory GeminiDuaClient({
     required http.Client client,
-    this.model = 'gemini-2.5-flash',
-  }) : _client = client;
+    String model = 'gemini-2.5-flash',
+  }) => GeminiDuaClient._(client, model);
+
+  GeminiDuaClient._(this._client, this.model);
 
   final http.Client _client;
   final String model;

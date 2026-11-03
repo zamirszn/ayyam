@@ -2,12 +2,15 @@ import 'package:ayyam/core/security/api_key_vault.dart';
 import 'package:ayyam/core/settings/app_preferences.dart';
 import 'package:ayyam/core/settings/app_preferences_controller.dart';
 import 'package:ayyam/features/dua/application/dua_generation_service.dart';
+import 'package:ayyam/features/dua/application/dua_reminder_platform.dart';
 import 'package:ayyam/features/dua/data/dua_repository.dart';
 import 'package:ayyam/features/dua/data/gemini_dua_client.dart';
 import 'package:ayyam/features/dua/domain/dua.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-final currentDateProvider = Provider<DateTime>((ref) => DateTime.now());
+final currentDateProvider = Provider<DateTime>(
+  (ref) => ref.watch(selectedDuaDayProvider) ?? DateTime.now(),
+);
 
 final todayDuaProvider =
     AsyncNotifierProvider<TodayDuaController, TodayDuaState>(
@@ -29,9 +32,10 @@ class TodayDuaNeedsKey extends TodayDuaState {
 }
 
 class TodayDuaReady extends TodayDuaState {
-  const TodayDuaReady(this.dua);
+  const TodayDuaReady(this.dua, {this.canMarkRecited = true});
 
   final Dua dua;
+  final bool canMarkRecited;
 }
 
 class TodayDuaFlagged extends TodayDuaState {
@@ -63,12 +67,18 @@ class TodayDuaController extends AsyncNotifier<TodayDuaState> {
 
   Future<void> markRecited() async {
     final current = state.value;
-    if (current is! TodayDuaReady || current.dua.isRecited) return;
+    if (current is! TodayDuaReady ||
+        current.dua.isRecited ||
+        !current.canMarkRecited) {
+      return;
+    }
     try {
       final updated = await ref
           .read(duaRepositoryProvider)
           .markRecited(current.dua.id, DateTime.now());
-      state = AsyncData<TodayDuaState>(TodayDuaReady(updated));
+      state = AsyncData<TodayDuaState>(
+        TodayDuaReady(updated, canMarkRecited: current.canMarkRecited),
+      );
     } catch (error, stackTrace) {
       state = AsyncError<TodayDuaState>(error, stackTrace);
     }
@@ -95,7 +105,10 @@ class TodayDuaController extends AsyncNotifier<TodayDuaState> {
       final visible = existing.status == DuaStatus.scheduled
           ? await repository.markShown(existing.id)
           : existing;
-      return TodayDuaReady(visible);
+      return TodayDuaReady(
+        visible,
+        canMarkRecited: ref.read(selectedDuaDayProvider) == null,
+      );
     }
 
     final apiKey = await ref.read(apiKeyVaultProvider).read();
@@ -111,7 +124,10 @@ class TodayDuaController extends AsyncNotifier<TodayDuaState> {
             apiKey: apiKey,
             language: preferences.translationLanguage,
           );
-      return TodayDuaReady(dua);
+      return TodayDuaReady(
+        dua,
+        canMarkRecited: ref.read(selectedDuaDayProvider) == null,
+      );
     } on DuaGenerationException catch (error) {
       return switch (error.error) {
         DuaGenerationError.invalidKey => const TodayDuaNeedsKey(rejected: true),
