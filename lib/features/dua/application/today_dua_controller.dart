@@ -2,6 +2,7 @@ import 'package:ayyam/core/security/api_key_vault.dart';
 import 'package:ayyam/core/settings/app_preferences.dart';
 import 'package:ayyam/core/settings/app_preferences_controller.dart';
 import 'package:ayyam/features/dua/application/dua_generation_service.dart';
+import 'package:ayyam/features/dua/application/dua_library_service.dart';
 import 'package:ayyam/features/dua/application/dua_reminder_platform.dart';
 import 'package:ayyam/features/dua/data/dua_repository.dart';
 import 'package:ayyam/features/dua/data/gemini_dua_client.dart';
@@ -76,6 +77,7 @@ class TodayDuaController extends AsyncNotifier<TodayDuaState> {
       final updated = await ref
           .read(duaRepositoryProvider)
           .markRecited(current.dua.id, DateTime.now());
+      ref.invalidate(duaLibraryProvider);
       state = AsyncData<TodayDuaState>(
         TodayDuaReady(updated, canMarkRecited: current.canMarkRecited),
       );
@@ -89,6 +91,7 @@ class TodayDuaController extends AsyncNotifier<TodayDuaState> {
     if (current is! TodayDuaReady) return;
     try {
       await ref.read(duaRepositoryProvider).flag(current.dua.id);
+      ref.invalidate(duaLibraryProvider);
       state = const AsyncData<TodayDuaState>(TodayDuaFlagged());
     } catch (error, stackTrace) {
       state = AsyncError<TodayDuaState>(error, stackTrace);
@@ -124,6 +127,7 @@ class TodayDuaController extends AsyncNotifier<TodayDuaState> {
             apiKey: apiKey,
             language: preferences.translationLanguage,
           );
+      ref.invalidate(duaLibraryProvider);
       return TodayDuaReady(
         dua,
         canMarkRecited: ref.read(selectedDuaDayProvider) == null,

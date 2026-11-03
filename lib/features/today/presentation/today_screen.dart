@@ -9,8 +9,11 @@ import 'package:ayyam/design/theme/nocturne_theme.dart';
 import 'package:ayyam/design/tokens/nocturne_tokens.dart';
 import 'package:ayyam/design/type/nocturne_type.dart';
 import 'package:ayyam/features/dua/application/dua_reminder_platform.dart';
+import 'package:ayyam/features/dua/application/dua_library_service.dart';
 import 'package:ayyam/features/dua/application/today_dua_controller.dart';
 import 'package:ayyam/features/dua/domain/dua.dart';
+import 'package:ayyam/features/dua/presentation/dua_library_screen.dart';
+import 'package:ayyam/features/dua/presentation/source_detail_screen.dart';
 import 'package:ayyam/features/settings/presentation/settings_screen.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +27,9 @@ class TodayScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final today = ref.watch(currentDateProvider);
     final selectedDay = ref.watch(selectedDuaDayProvider);
+    final library = preferences.duaEnabled
+        ? ref.watch(duaLibraryProvider)
+        : null;
     final duaState = preferences.duaEnabled
         ? ref.watch(todayDuaProvider)
         : null;
@@ -51,6 +57,15 @@ class TodayScreen extends ConsumerWidget {
                 const Spacer(),
                 Text('TODAY / 001', style: NocturneType.label(theme.muted)),
                 const SizedBox(width: NocturneSpace.x3),
+                if (preferences.duaEnabled) ...<Widget>[
+                  CircleAction(
+                    glyph: NocturneGlyph.calendar,
+                    onTap: () => _openLibrary(context),
+                    semanticLabel: 'Open dua library',
+                    size: 38,
+                  ),
+                  const SizedBox(width: NocturneSpace.x2),
+                ],
                 CircleAction(
                   glyph: NocturneGlyph.settings,
                   onTap: () => _openSettings(context),
@@ -106,6 +121,13 @@ class TodayScreen extends ConsumerWidget {
                       )
                     else
                       const _LifeOnlyHeader(),
+                    if (library != null) ...<Widget>[
+                      const SizedBox(height: NocturneSpace.x8),
+                      _LibraryPreview(
+                        library: library,
+                        onTap: () => _openLibrary(context),
+                      ),
+                    ],
                     if (preferences.lifeInDotsEnabled) ...<Widget>[
                       const SizedBox(height: NocturneSpace.x8),
                       const _LifePreview(),
@@ -131,6 +153,15 @@ class TodayScreen extends ConsumerWidget {
       nocturnePageRoute<void>(
         const RouteSettings(name: '/settings'),
         (_) => SettingsScreen(initialPreferences: preferences),
+      ),
+    );
+  }
+
+  void _openLibrary(BuildContext context) {
+    Navigator.of(context).push<void>(
+      nocturnePageRoute<void>(
+        const RouteSettings(name: '/dua/library'),
+        (_) => const DuaLibraryScreen(),
       ),
     );
   }
@@ -385,7 +416,10 @@ class _ReadyDua extends StatelessWidget {
         const _SectionRule(index: '02', label: 'Sources'),
         const SizedBox(height: NocturneSpace.x3),
         for (var index = 0; index < dua.sources.length; index++) ...<Widget>[
-          _SourceRow(source: dua.sources[index]),
+          _SourceRow(
+            source: dua.sources[index],
+            onTap: () => _openSource(context, dua.sources[index]),
+          ),
           if (index != dua.sources.length - 1)
             const SizedBox(height: NocturneSpace.x2),
         ],
@@ -441,6 +475,15 @@ class _ReadyDua extends StatelessWidget {
       ],
     );
   }
+
+  void _openSource(BuildContext context, DuaSource source) {
+    Navigator.of(context).push<void>(
+      nocturnePageRoute<void>(
+        const RouteSettings(name: '/dua/source'),
+        (_) => SourceDetailScreen(source: source, dua: dua),
+      ),
+    );
+  }
 }
 
 class _FlaggedDua extends StatelessWidget {
@@ -480,9 +523,10 @@ class _FlaggedDua extends StatelessWidget {
 }
 
 class _SourceRow extends StatelessWidget {
-  const _SourceRow({required this.source});
+  const _SourceRow({required this.source, required this.onTap});
 
   final DuaSource source;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -490,6 +534,8 @@ class _SourceRow extends StatelessWidget {
     return GlassCard(
       radius: NocturneRadius.medium,
       padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+      onTap: onTap,
+      semanticLabel: 'Open source ${source.collection} ${source.reference}',
       child: Row(
         children: <Widget>[
           Container(
@@ -526,8 +572,90 @@ class _SourceRow extends StatelessWidget {
           ),
           if (source.grading case final grading?)
             Text(grading.toUpperCase(), style: NocturneType.label(theme.kept)),
+          const SizedBox(width: NocturneSpace.x2),
+          NocturneIcon(NocturneGlyph.arrowRight, size: 17, color: theme.faint),
         ],
       ),
+    );
+  }
+}
+
+class _LibraryPreview extends StatelessWidget {
+  const _LibraryPreview({required this.library, required this.onTap});
+
+  final AsyncValue<DuaLibrary> library;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = NocturneScope.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const _SectionRule(index: '03', label: 'Streak & collection'),
+        const SizedBox(height: NocturneSpace.x3),
+        GlassCard(
+          onTap: onTap,
+          semanticLabel: 'Open dua history and collection',
+          tint: theme.kept,
+          child: library.when(
+            data: (value) => Row(
+              children: <Widget>[
+                Expanded(
+                  child: _PreviewStat(
+                    value: '${value.stats.current}',
+                    label: 'CURRENT',
+                  ),
+                ),
+                Expanded(
+                  child: _PreviewStat(
+                    value: '${value.stats.longest}',
+                    label: 'LONGEST',
+                  ),
+                ),
+                Expanded(
+                  child: _PreviewStat(
+                    value: '${value.stats.totalCollected}',
+                    label: 'COLLECTED',
+                  ),
+                ),
+                NocturneIcon(
+                  NocturneGlyph.arrowRight,
+                  size: 18,
+                  color: theme.faint,
+                ),
+              ],
+            ),
+            error: (error, stackTrace) => Text(
+              'Open the library to retry local history.',
+              style: NocturneType.body(theme.muted),
+            ),
+            loading: () => Text(
+              'READING LOCAL HISTORY…',
+              style: NocturneType.label(theme.muted),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PreviewStat extends StatelessWidget {
+  const _PreviewStat({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = NocturneScope.of(context);
+    return Column(
+      children: <Widget>[
+        Text(value, style: NocturneType.title(theme.ink)),
+        const SizedBox(height: NocturneSpace.x1),
+        Text(label, style: NocturneType.label(theme.faint)),
+      ],
     );
   }
 }

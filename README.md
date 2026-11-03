@@ -49,13 +49,13 @@ The user supplies their own Gemini API key. On Android it will be stored in Keys
 - [x] Settings screen, preferences management, and Nocturne date/time pickers
 - [x] Local database, Gemini generation, validation, deduplication, and dua card
 - [x] Android notifications, exact alarms, reboot recovery, and five-day prefetch
-- [ ] History, collection, source details, and streaks
+- [x] History, collection, source details, and streaks
 - [ ] Life in Dots visualization, prayer check-in, and personal make-up tracking
 - [ ] Analytics, data export/import, web build, accessibility, and release QA
 
 ## Current status
 
-Ayyam is in early development. The app now maintains a five-day future dua buffer, schedules local Android reminders from stored content, restores alarms after reboot, and uses periodic background work to refill the buffer. Work is moving next to history, collection, source details, and streaks.
+Ayyam is in early development. The app now includes calendar and swipe-based dua history, a searchable and filterable recited collection, full source-detail views, and honest current/longest streaks that are not repaired by late recitation. Work is moving next to Life in Dots, prayer check-ins, and personal make-up tracking.
 
 The complete product requirements are in the [PRD](./PRD%20Dua%20Bucket%20List%20and%20Life%20in%20Dots.md).
 

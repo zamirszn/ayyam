@@ -20,6 +20,7 @@ void main() {
     final flagged = await repository.flag(dua.id);
 
     expect(restored?.arabic, dua.arabic);
+    expect((await repository.all()).single.id, dua.id);
     expect(restored?.sources.single.reference, '20:114');
     expect(await repository.containsId(dua.id), isTrue);
     expect(await repository.exclusionHints(), isNotEmpty);

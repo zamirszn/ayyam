@@ -12,6 +12,8 @@ final duaRepositoryProvider = Provider<DuaRepository>((ref) {
 });
 
 abstract interface class DuaRepository {
+  Future<List<Dua>> all();
+
   Future<Dua?> findAssignedTo(DateTime date);
 
   Future<List<Dua>> findAssignedBetween(DateTime start, DateTime end);
@@ -33,6 +35,14 @@ class DriftDuaRepository implements DuaRepository {
   DriftDuaRepository(this._database);
 
   final AppDatabase _database;
+
+  @override
+  Future<List<Dua>> all() async {
+    final query = _database.select(_database.duaRecords)
+      ..orderBy([(row) => OrderingTerm.desc(row.assignedDay)]);
+    final records = await query.get();
+    return records.map(_fromRecord).toList(growable: false);
+  }
 
   @override
   Future<Dua?> findAssignedTo(DateTime date) async {
@@ -184,6 +194,13 @@ class MemoryDuaRepository implements DuaRepository {
   final Map<String, Dua> _byId = <String, Dua>{};
 
   List<Dua> get values => List<Dua>.unmodifiable(_byId.values);
+
+  @override
+  Future<List<Dua>> all() async {
+    final values = _byId.values.toList()
+      ..sort((a, b) => b.assignedDate.compareTo(a.assignedDate));
+    return List<Dua>.unmodifiable(values);
+  }
 
   @override
   Future<Dua?> findAssignedTo(DateTime date) async {
