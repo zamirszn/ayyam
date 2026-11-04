@@ -6,6 +6,7 @@ import 'package:ayyam/features/life/presentation/life_dots_view.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:motor/motor.dart';
 
 void main() {
   testWidgets('opens with today visible in the virtualized scrollable grid', (
@@ -90,22 +91,73 @@ void main() {
     expect(semantics.hasAction(SemanticsAction.increase), isTrue);
     expect(semantics.hasAction(SemanticsAction.decrease), isTrue);
   });
+
+  testWidgets('reveals visible dots with Motor unless motion is reduced', (
+    tester,
+  ) async {
+    final days = <LifeDot>[
+      for (var index = 0; index < 40; index++)
+        LifeDot(
+          date: DateTime(2026, 1, index + 1),
+          state: LifeDotState.unrecorded,
+          isToday: index == 20,
+          estimated: false,
+        ),
+    ];
+
+    await tester.pumpWidget(
+      _Harness(
+        child: LifeDotsView(
+          years: <LifeYear>[LifeYear(age: 0, days: days)],
+          selectedDate: days[20].date,
+          onSelected: (_) {},
+        ),
+      ),
+    );
+
+    expect(find.byType(SingleMotionBuilder), findsNWidgets(2));
+    expect(
+      find.byKey(const ValueKey<String>('life-dot-reveal-0')),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(
+      _Harness(
+        disableAnimations: true,
+        child: LifeDotsView(
+          years: <LifeYear>[LifeYear(age: 0, days: days)],
+          selectedDate: days[20].date,
+          onSelected: (_) {},
+        ),
+      ),
+    );
+
+    expect(find.byType(SingleMotionBuilder), findsNothing);
+    expect(find.byType(CustomPaint), findsWidgets);
+  });
 }
 
 class _Harness extends StatelessWidget {
-  const _Harness({required this.child});
+  const _Harness({required this.child, this.disableAnimations = false});
 
   final Widget child;
+  final bool disableAnimations;
 
   @override
   Widget build(BuildContext context) {
     return WidgetsApp(
       color: NocturneThemeData.dark.canvas,
-      builder: (context, _) => NocturneScope(
-        theme: NocturneThemeData.dark,
-        tone: NocturneTone.pending,
-        child: Center(child: child),
-      ),
+      builder: (context, _) {
+        final media = MediaQuery.maybeOf(context) ?? const MediaQueryData();
+        return MediaQuery(
+          data: media.copyWith(disableAnimations: disableAnimations),
+          child: NocturneScope(
+            theme: NocturneThemeData.dark,
+            tone: NocturneTone.pending,
+            child: Center(child: child),
+          ),
+        );
+      },
     );
   }
 }

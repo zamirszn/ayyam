@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:ayyam/design/motion/nocturne_motion.dart';
 import 'package:ayyam/design/theme/nocturne_theme.dart';
 import 'package:ayyam/design/type/nocturne_type.dart';
 import 'package:ayyam/features/life/domain/prayer_day.dart';
@@ -152,29 +153,48 @@ class _LifeDotsViewState extends State<LifeDotsView> {
                                   (dot) =>
                                       _sameDay(dot.date, widget.selectedDate!),
                                 );
+                            final focused = selectedInYear || hasToday;
+
+                            Widget buildCanvas(double reveal, double focus) {
+                              return _LifeYearCanvas(
+                                year: year,
+                                columns: _columns,
+                                cellExtent: cellExtent,
+                                headerHeight: _yearHeaderHeight,
+                                selectedDate: widget.selectedDate,
+                                revealProgress: reveal,
+                                focusProgress: focus,
+                                onSelected: widget.onSelected,
+                              );
+                            }
+
+                            final dots = NocturneMotion.reduced(context)
+                                ? buildCanvas(1, focused ? 1 : 0)
+                                : SingleMotionBuilder(
+                                    key: ValueKey<String>(
+                                      'life-dot-reveal-${year.age}',
+                                    ),
+                                    motion: NocturneMotion.enter,
+                                    from: 0,
+                                    value: 1,
+                                    builder: (context, reveal, child) {
+                                      return SingleMotionBuilder(
+                                        key: ValueKey<String>(
+                                          'life-dot-focus-${year.age}-${selectedInYear ? widget.selectedDate?.millisecondsSinceEpoch : hasToday}',
+                                        ),
+                                        motion: NocturneMotion.enterFast,
+                                        from: 0,
+                                        value: focused ? 1 : 0,
+                                        builder: (context, focus, child) =>
+                                            buildCanvas(reveal, focus),
+                                      );
+                                    },
+                                  );
                             return RepaintBoundary(
                               key: hasToday
                                   ? const ValueKey('life-dot-today')
                                   : null,
-                              child: SingleMotionBuilder(
-                                key: ValueKey<String>(
-                                  '${year.age}-${selectedInYear ? widget.selectedDate?.millisecondsSinceEpoch : hasToday}',
-                                ),
-                                motion: const CupertinoMotion.snappy(),
-                                from: 0,
-                                value: selectedInYear || hasToday ? 1 : 0,
-                                builder: (context, focus, child) {
-                                  return _LifeYearCanvas(
-                                    year: year,
-                                    columns: _columns,
-                                    cellExtent: cellExtent,
-                                    headerHeight: _yearHeaderHeight,
-                                    selectedDate: widget.selectedDate,
-                                    focusProgress: focus,
-                                    onSelected: widget.onSelected,
-                                  );
-                                },
-                              ),
+                              child: dots,
                             );
                           },
                         ),
@@ -313,6 +333,7 @@ class _LifeYearCanvas extends StatelessWidget {
     required this.cellExtent,
     required this.headerHeight,
     required this.selectedDate,
+    required this.revealProgress,
     required this.focusProgress,
     required this.onSelected,
   });
@@ -322,6 +343,7 @@ class _LifeYearCanvas extends StatelessWidget {
   final double cellExtent;
   final double headerHeight;
   final DateTime? selectedDate;
+  final double revealProgress;
   final double focusProgress;
   final ValueChanged<LifeDot> onSelected;
 
@@ -348,6 +370,7 @@ class _LifeYearCanvas extends StatelessWidget {
           cellExtent: cellExtent,
           headerHeight: headerHeight,
           selectedDate: selectedDate,
+          revealProgress: revealProgress,
           focusProgress: focusProgress,
           theme: theme,
         ),
@@ -363,6 +386,7 @@ class _LifeYearPainter extends CustomPainter {
     required this.cellExtent,
     required this.headerHeight,
     required this.selectedDate,
+    required this.revealProgress,
     required this.focusProgress,
     required this.theme,
   });
@@ -372,11 +396,14 @@ class _LifeYearPainter extends CustomPainter {
   final double cellExtent;
   final double headerHeight;
   final DateTime? selectedDate;
+  final double revealProgress;
   final double focusProgress;
   final NocturneThemeData theme;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final reveal = revealProgress.clamp(0.0, 1.0);
+    final focus = focusProgress.clamp(0.0, 1.0);
     final first = year.days.isEmpty ? null : year.days.first.date.year;
     final label = first == null
         ? 'AGE ${year.age}'
@@ -414,23 +441,37 @@ class _LifeYearPainter extends CustomPainter {
           selectedDate != null && _sameDay(dot.date, selectedDate!);
       final highlighted = dot.isToday || selected;
       final baseRadius = math.min(3.1, cellExtent * 0.25);
-      final radius = highlighted
-          ? baseRadius * (1 + (focusProgress * 0.22))
+      final dotReveal = _staggeredReveal(
+        index: index,
+        total: year.days.length,
+        columns: columns,
+        progress: reveal,
+      );
+      final revealScale = 0.45 + (dotReveal * 0.55);
+      final focusedRadius = highlighted
+          ? baseRadius * (1 + (focus * 0.22))
           : baseRadius;
+      final radius = focusedRadius * revealScale;
+      final resolvedColor = dot.estimated
+          ? color.withValues(alpha: 0.58)
+          : color;
       canvas.drawCircle(
         center,
         radius,
-        Paint()..color = dot.estimated ? color.withValues(alpha: 0.58) : color,
+        Paint()
+          ..color = resolvedColor.withValues(
+            alpha: resolvedColor.a * dotReveal,
+          ),
       );
       if (highlighted) {
         canvas.drawCircle(
           center,
-          radius + 1.4 + (focusProgress * 1.5),
+          radius + ((1.4 + (focus * 1.5)) * revealScale),
           Paint()
             ..style = PaintingStyle.stroke
             ..strokeWidth = selected ? 1.7 : 1.2
             ..color = (selected ? theme.ink : theme.accent).withValues(
-              alpha: 0.55 + (focusProgress * 0.45),
+              alpha: (0.55 + (focus * 0.45)) * dotReveal,
             ),
         );
       }
@@ -443,9 +484,30 @@ class _LifeYearPainter extends CustomPainter {
         oldDelegate.columns != columns ||
         oldDelegate.cellExtent != cellExtent ||
         oldDelegate.selectedDate != selectedDate ||
+        oldDelegate.revealProgress != revealProgress ||
         oldDelegate.focusProgress != focusProgress ||
         oldDelegate.theme != theme;
   }
+}
+
+double _staggeredReveal({
+  required int index,
+  required int total,
+  required int columns,
+  required double progress,
+}) {
+  if (progress <= 0) return 0;
+  if (progress >= 1 || total <= 1) return 1;
+
+  final safeColumns = math.max(1, columns);
+  final rows = (total / safeColumns).ceil();
+  final column = index % safeColumns;
+  final row = index ~/ safeColumns;
+  final maxDiagonal = math.max(1, (safeColumns - 1) + (rows - 1));
+  const staggerSpan = 0.45;
+  final start = ((column + row) / maxDiagonal) * staggerSpan;
+  final local = ((progress - start) / (1 - staggerSpan)).clamp(0.0, 1.0);
+  return Curves.easeOutCubic.transform(local);
 }
 
 class _MoveDayIntent extends Intent {
