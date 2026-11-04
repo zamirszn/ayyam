@@ -26,6 +26,7 @@ class LocalAppPreferencesRepository implements AppPreferencesRepository {
       'ayyam.settings.lifeReminderEnabled';
   static const String _lifeReminderHour = 'ayyam.settings.lifeReminderHour';
   static const String _lifeReminderMinute = 'ayyam.settings.lifeReminderMinute';
+  static const String _themeMode = 'ayyam.settings.themeMode';
 
   @override
   Future<AppPreferences> load() async {
@@ -41,6 +42,7 @@ class LocalAppPreferencesRepository implements AppPreferencesRepository {
       _preferences.getBool(_lifeReminderEnabled),
       _preferences.getInt(_lifeReminderHour),
       _preferences.getInt(_lifeReminderMinute),
+      _preferences.getString(_themeMode),
     ]);
     final dateValue = values[6] as String?;
 
@@ -64,6 +66,10 @@ class LocalAppPreferencesRepository implements AppPreferencesRepository {
           values[9] as int? ?? AppPreferences.defaults.lifeReminderHour,
       lifeReminderMinute:
           values[10] as int? ?? AppPreferences.defaults.lifeReminderMinute,
+      themeMode: AppThemeMode.values.firstWhere(
+        (mode) => mode.name == values[11],
+        orElse: () => AppPreferences.defaults.themeMode,
+      ),
     );
   }
 
@@ -86,6 +92,7 @@ class LocalAppPreferencesRepository implements AppPreferencesRepository {
       ),
       _preferences.setInt(_lifeReminderHour, preferences.lifeReminderHour),
       _preferences.setInt(_lifeReminderMinute, preferences.lifeReminderMinute),
+      _preferences.setString(_themeMode, preferences.themeMode.name),
       if (preferences.dateOfBirth case final date?)
         _preferences.setString(_dateOfBirth, date.toIso8601String())
       else

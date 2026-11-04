@@ -16,7 +16,10 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class LifeScreen extends ConsumerStatefulWidget {
-  const LifeScreen({super.key});
+  const LifeScreen({super.key, this.embedded = false, this.onOpenMakeup});
+
+  final bool embedded;
+  final VoidCallback? onOpenMakeup;
 
   @override
   ConsumerState<LifeScreen> createState() => _LifeScreenState();
@@ -31,24 +34,30 @@ class _LifeScreenState extends ConsumerState<LifeScreen> {
     final dashboard = ref.watch(lifeDashboardProvider);
     return NocturneScaffold(
       tone: NocturneTone.rest,
+      includeBottomSafeArea: !widget.embedded,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
+        padding: EdgeInsets.fromLTRB(
           NocturneSpace.gutter,
           NocturneSpace.x2,
           NocturneSpace.gutter,
-          NocturneSpace.x5,
+          widget.embedded
+              ? NocturneSpace.navHeight + NocturneSpace.x4
+              : NocturneSpace.x5,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Row(
               children: <Widget>[
-                CircleAction(
-                  glyph: NocturneGlyph.chevronLeft,
-                  onTap: () => Navigator.of(context).maybePop(),
-                  semanticLabel: 'Back',
-                  size: 38,
-                ),
+                if (!widget.embedded)
+                  CircleAction(
+                    glyph: NocturneGlyph.chevronLeft,
+                    onTap: () => Navigator.of(context).maybePop(),
+                    semanticLabel: 'Back',
+                    size: 38,
+                  )
+                else
+                  Text('LIFE', style: NocturneType.label(theme.ink)),
                 const Spacer(),
                 Text('LIFE / 005', style: NocturneType.label(theme.muted)),
               ],
@@ -239,6 +248,10 @@ class _LifeScreenState extends ConsumerState<LifeScreen> {
   }
 
   void _openMakeup() {
+    if (widget.onOpenMakeup != null) {
+      widget.onOpenMakeup!();
+      return;
+    }
     Navigator.of(context).push<void>(
       nocturnePageRoute<void>(
         const RouteSettings(name: '/life/makeup'),

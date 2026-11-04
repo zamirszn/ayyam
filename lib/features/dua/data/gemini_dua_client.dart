@@ -51,6 +51,8 @@ class GeminiDuaClient implements DuaGeneratorClient {
   final String preferredModel;
   String? _resolvedModel;
 
+  static const String _stableFallbackModel = 'gemini-flash-latest';
+
   @override
   Future<GeneratedDuaCandidate> generate({
     required String apiKey,
@@ -86,35 +88,56 @@ class GeminiDuaClient implements DuaGeneratorClient {
       'generationConfig': <String, Object?>{
         'temperature': 0.15,
         'responseMimeType': 'application/json',
-        'responseJsonSchema': _responseSchema,
+        'responseSchema': _responseSchema,
       },
     });
 
     final excludedModels = <String>{};
-    var model = _resolvedModel ?? await _discoverModel(normalizedKey);
-    late http.Response response;
-    for (var modelAttempt = 0; modelAttempt < 3; modelAttempt++) {
-      _resolvedModel = model;
-      response = await _postGeneration(
+    final candidates = <String>[
+      ?_resolvedModel,
+      preferredModel,
+      _stableFallbackModel,
+    ];
+    http.Response? lastResponse;
+    var discoveredModels = false;
+    for (var modelAttempt = 0; modelAttempt < 6; modelAttempt++) {
+      String model;
+      while (candidates.isNotEmpty &&
+          excludedModels.contains(candidates.first)) {
+        candidates.removeAt(0);
+      }
+      if (candidates.isEmpty && !discoveredModels) {
+        candidates.addAll(
+          await _discoverModels(normalizedKey, excluded: excludedModels),
+        );
+        discoveredModels = true;
+      }
+      if (candidates.isNotEmpty) {
+        model = candidates.removeAt(0);
+      } else {
+        break;
+      }
+
+      final response = await _postGeneration(
         apiKey: normalizedKey,
         model: model,
         body: body,
       );
-      if (response.statusCode == 200 || !_shouldTryAnotherModel(response)) {
-        break;
+      if (response.statusCode == 200) {
+        _resolvedModel = model;
+        return _parseCandidate(response);
+      }
+      lastResponse = response;
+      if (!_shouldTryAnotherModel(response)) {
+        throw _httpFailure(response, apiKey: normalizedKey);
       }
       excludedModels.add(model);
-      try {
-        model = await _discoverModel(normalizedKey, excluded: excludedModels);
-      } on DuaGenerationException {
-        break;
-      }
     }
 
-    if (response.statusCode != 200) {
-      throw _httpFailure(response);
-    }
+    throw _httpFailure(lastResponse!, apiKey: normalizedKey);
+  }
 
+  GeneratedDuaCandidate _parseCandidate(http.Response response) {
     try {
       final envelope = jsonDecode(response.body);
       if (envelope is! Map<Object?, Object?>) {
@@ -189,7 +212,7 @@ class GeminiDuaClient implements DuaGeneratorClient {
     }
   }
 
-  Future<String> _discoverModel(
+  Future<List<String>> _discoverModels(
     String apiKey, {
     Set<String> excluded = const <String>{},
   }) async {
@@ -216,7 +239,9 @@ class GeminiDuaClient implements DuaGeneratorClient {
         'Gemini model discovery could not be reached.',
       );
     }
-    if (response.statusCode != 200) throw _httpFailure(response);
+    if (response.statusCode != 200) {
+      throw _httpFailure(response, apiKey: apiKey);
+    }
     try {
       final decoded = jsonDecode(response.body);
       if (decoded is! Map<Object?, Object?>) {
@@ -240,7 +265,6 @@ class GeminiDuaClient implements DuaGeneratorClient {
           available.add(normalized);
         }
       }
-      if (available.contains(preferredModel)) return preferredModel;
       if (available.isEmpty) {
         throw const DuaGenerationException(
           DuaGenerationError.unavailable,
@@ -248,7 +272,7 @@ class GeminiDuaClient implements DuaGeneratorClient {
         );
       }
       available.sort((a, b) => _modelScore(b).compareTo(_modelScore(a)));
-      return available.first;
+      return List<String>.unmodifiable(available);
     } on DuaGenerationException {
       rethrow;
     } on FormatException catch (error) {
@@ -272,6 +296,7 @@ class GeminiDuaClient implements DuaGeneratorClient {
       'live',
       'robotics',
       'computer-use',
+      'transcribe',
     ].any(normalized.contains)) {
       return -1;
     }
@@ -290,9 +315,19 @@ class GeminiDuaClient implements DuaGeneratorClient {
     return score;
   }
 
-  DuaGenerationException _httpFailure(http.Response response) {
-    final message = _errorMessage(response.body);
-    if (<int>{400, 401, 403}.contains(response.statusCode)) {
+  DuaGenerationException _httpFailure(
+    http.Response response, {
+    required String apiKey,
+  }) {
+    final rawMessage = _errorMessage(response.body);
+    final message = rawMessage?.replaceAll(apiKey, '[redacted]');
+    final normalizedMessage = message?.toLowerCase() ?? '';
+    final authenticationFailure =
+        <int>{401, 403}.contains(response.statusCode) ||
+        (response.statusCode == 400 &&
+            (normalizedMessage.contains('api key') ||
+                normalizedMessage.contains('api_key_invalid')));
+    if (authenticationFailure) {
       return DuaGenerationException(
         DuaGenerationError.invalidKey,
         message ?? 'The Gemini API key was not accepted.',
@@ -302,6 +337,12 @@ class GeminiDuaClient implements DuaGeneratorClient {
       return DuaGenerationException(
         DuaGenerationError.rateLimited,
         message ?? 'Gemini is rate-limiting requests.',
+      );
+    }
+    if (response.statusCode == 400) {
+      return DuaGenerationException(
+        DuaGenerationError.malformed,
+        message ?? 'Gemini rejected the structured generation request.',
       );
     }
     return DuaGenerationException(
@@ -380,8 +421,7 @@ $exclusions
   }
 
   static const Map<String, Object?> _responseSchema = <String, Object?>{
-    'type': 'object',
-    'additionalProperties': false,
+    'type': 'OBJECT',
     'required': <String>[
       'arabic',
       'transliteration',
@@ -391,28 +431,27 @@ $exclusions
       'sources',
     ],
     'properties': <String, Object?>{
-      'arabic': <String, Object?>{'type': 'string'},
-      'transliteration': <String, Object?>{'type': 'string'},
-      'translation': <String, Object?>{'type': 'string'},
-      'benefits': <String, Object?>{'type': 'string'},
-      'occasion': <String, Object?>{'type': 'string'},
+      'arabic': <String, Object?>{'type': 'STRING'},
+      'transliteration': <String, Object?>{'type': 'STRING'},
+      'translation': <String, Object?>{'type': 'STRING'},
+      'benefits': <String, Object?>{'type': 'STRING'},
+      'occasion': <String, Object?>{'type': 'STRING'},
       'sources': <String, Object?>{
-        'type': 'array',
+        'type': 'ARRAY',
         'minItems': 1,
         'maxItems': 5,
         'items': <String, Object?>{
-          'type': 'object',
-          'additionalProperties': false,
+          'type': 'OBJECT',
           'required': <String>['type', 'collection', 'reference', 'grading'],
           'properties': <String, Object?>{
             'type': <String, Object?>{
-              'type': 'string',
+              'type': 'STRING',
               'enum': <String>['quran', 'hadith'],
             },
-            'collection': <String, Object?>{'type': 'string'},
-            'reference': <String, Object?>{'type': 'string'},
+            'collection': <String, Object?>{'type': 'STRING'},
+            'reference': <String, Object?>{'type': 'STRING'},
             'grading': <String, Object?>{
-              'type': 'string',
+              'type': 'STRING',
               'enum': <String>['Quran', 'Sahih', 'Hasan'],
             },
           },

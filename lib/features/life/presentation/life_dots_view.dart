@@ -5,6 +5,7 @@ import 'package:ayyam/design/type/nocturne_type.dart';
 import 'package:ayyam/features/life/domain/prayer_day.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:motor/motor.dart';
 
 class LifeDotsView extends StatefulWidget {
   const LifeDotsView({
@@ -23,22 +24,21 @@ class LifeDotsView extends StatefulWidget {
 }
 
 class _LifeDotsViewState extends State<LifeDotsView> {
-  static const int _columns = 7;
-  static const double _rowExtent = 27;
   static const double _viewportHeight = 350;
-  static const double _dotSize = 14;
+  static const double _yearHeaderHeight = 28;
 
   late List<LifeDot> _days;
   late ScrollController _scrollController;
   bool _focused = false;
+  bool _didInitialScroll = false;
+  double _itemExtent = 150;
+  int _columns = 28;
 
   @override
   void initState() {
     super.initState();
     _days = _flatten(widget.years);
-    _scrollController = ScrollController(
-      initialScrollOffset: _initialOffset(_days),
-    );
+    _scrollController = ScrollController();
   }
 
   @override
@@ -46,6 +46,7 @@ class _LifeDotsViewState extends State<LifeDotsView> {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.years, widget.years)) {
       _days = _flatten(widget.years);
+      _didInitialScroll = false;
     }
   }
 
@@ -71,7 +72,8 @@ class _LifeDotsViewState extends State<LifeDotsView> {
       decreasedValue: selectedDot == null
           ? null
           : _describeDot(_adjacentSelection(-1) ?? selectedDot),
-      hint: 'Scroll vertically, tap a dot, or use arrow keys to choose a day. Press Home to return to today.',
+      hint:
+          '${_days.length} calendar days. Scroll by age, tap a dot, or use arrow keys. Press Home for today.',
       onIncrease: () => _moveSelection(1),
       onDecrease: () => _moveSelection(-1),
       child: FocusableActionDetector(
@@ -82,14 +84,20 @@ class _LifeDotsViewState extends State<LifeDotsView> {
         shortcuts: const <ShortcutActivator, Intent>{
           SingleActivator(LogicalKeyboardKey.arrowRight): _MoveDayIntent(1),
           SingleActivator(LogicalKeyboardKey.arrowLeft): _MoveDayIntent(-1),
-          SingleActivator(LogicalKeyboardKey.arrowDown): _MoveDayIntent(7),
-          SingleActivator(LogicalKeyboardKey.arrowUp): _MoveDayIntent(-7),
+          SingleActivator(LogicalKeyboardKey.arrowDown): _MoveRowIntent(1),
+          SingleActivator(LogicalKeyboardKey.arrowUp): _MoveRowIntent(-1),
           SingleActivator(LogicalKeyboardKey.home): _TodayIntent(),
         },
         actions: <Type, Action<Intent>>{
           _MoveDayIntent: CallbackAction<_MoveDayIntent>(
             onInvoke: (intent) {
               _moveSelection(intent.delta);
+              return null;
+            },
+          ),
+          _MoveRowIntent: CallbackAction<_MoveRowIntent>(
+            onInvoke: (intent) {
+              _moveSelection(intent.direction * _columns);
               return null;
             },
           ),
@@ -110,72 +118,115 @@ class _LifeDotsViewState extends State<LifeDotsView> {
             borderRadius: BorderRadius.circular(20),
             child: SizedBox(
               height: _viewportHeight,
-              child: Stack(
-                children: <Widget>[
-                  Positioned.fill(
-                    child: GridView.builder(
-                      key: const ValueKey('life-dots-grid'),
-                      controller: _scrollController,
-                      padding: const EdgeInsets.fromLTRB(12, 16, 12, 18),
-                      physics: const ClampingScrollPhysics(),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: _columns,
-                            mainAxisExtent: _rowExtent,
-                            crossAxisSpacing: 3,
-                          ),
-                      itemCount: _days.length,
-                      itemBuilder: (context, index) {
-                        final dot = _days[index];
-                        return _LifeDotCell(
-                          key: dot.isToday
-                              ? const ValueKey('life-dot-today')
-                              : null,
-                          dot: dot,
-                          selected:
-                              widget.selectedDate != null &&
-                              _sameDay(dot.date, widget.selectedDate!),
-                          onTap: () => widget.onSelected(dot),
-                        );
-                      },
-                    ),
-                  ),
-                  Positioned(
-                    right: 10,
-                    bottom: 10,
-                    child: Semantics(
-                      button: true,
-                      label: 'Jump to today',
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _selectToday,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: theme.canvas.withValues(alpha: 0.92),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: theme.lineStrong),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            child: Text(
-                              'TODAY',
-                              style: NocturneType.label(theme.accent),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth;
+                  _columns = (width / 11).floor().clamp(21, 32);
+                  final cellExtent = width / _columns;
+                  final longestYear = widget.years.fold<int>(
+                    1,
+                    (longest, year) => math.max(longest, year.days.length),
+                  );
+                  final rows = (longestYear / _columns).ceil();
+                  _itemExtent = _yearHeaderHeight + (rows * cellExtent) + 12;
+                  _scheduleInitialScroll();
+
+                  return Stack(
+                    children: <Widget>[
+                      Positioned.fill(
+                        child: ListView.builder(
+                          key: ValueKey<String>('life-dots-${_days.length}'),
+                          controller: _scrollController,
+                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 72),
+                          physics: const ClampingScrollPhysics(),
+                          itemExtent: _itemExtent,
+                          itemCount: widget.years.length,
+                          itemBuilder: (context, index) {
+                            final year = widget.years[index];
+                            final hasToday = year.days.any(
+                              (dot) => dot.isToday,
+                            );
+                            final selectedInYear =
+                                widget.selectedDate != null &&
+                                year.days.any(
+                                  (dot) =>
+                                      _sameDay(dot.date, widget.selectedDate!),
+                                );
+                            return RepaintBoundary(
+                              key: hasToday
+                                  ? const ValueKey('life-dot-today')
+                                  : null,
+                              child: SingleMotionBuilder(
+                                key: ValueKey<String>(
+                                  '${year.age}-${selectedInYear ? widget.selectedDate?.millisecondsSinceEpoch : hasToday}',
+                                ),
+                                motion: const CupertinoMotion.snappy(),
+                                from: 0,
+                                value: selectedInYear || hasToday ? 1 : 0,
+                                builder: (context, focus, child) {
+                                  return _LifeYearCanvas(
+                                    year: year,
+                                    columns: _columns,
+                                    cellExtent: cellExtent,
+                                    headerHeight: _yearHeaderHeight,
+                                    selectedDate: widget.selectedDate,
+                                    focusProgress: focus,
+                                    onSelected: widget.onSelected,
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      Positioned(
+                        right: 10,
+                        bottom: 10,
+                        child: Semantics(
+                          button: true,
+                          label: 'Jump to today',
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _selectToday,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: theme.canvas.withValues(alpha: 0.92),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(color: theme.lineStrong),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                child: Text(
+                                  'TODAY',
+                                  style: NocturneType.label(theme.accent),
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                ],
+                    ],
+                  );
+                },
               ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  void _scheduleInitialScroll() {
+    if (_didInitialScroll) return;
+    _didInitialScroll = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final todayIndex = _days.indexWhere((dot) => dot.isToday);
+      if (todayIndex >= 0) _jumpToIndex(todayIndex);
+    });
   }
 
   void _selectToday() {
@@ -197,15 +248,36 @@ class _LifeDotsViewState extends State<LifeDotsView> {
     _scrollToIndex(nextIndex);
   }
 
+  void _jumpToIndex(int index) {
+    final target = _targetForIndex(index);
+    _scrollController.jumpTo(
+      target.clamp(0, _scrollController.position.maxScrollExtent),
+    );
+  }
+
   void _scrollToIndex(int index) {
     if (!_scrollController.hasClients) return;
-    final row = index ~/ _columns;
-    final target = row * _rowExtent - (_viewportHeight * 0.68);
     _scrollController.animateTo(
-      target.clamp(0, _scrollController.position.maxScrollExtent),
+      _targetForIndex(index)
+          .clamp(0, _scrollController.position.maxScrollExtent),
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
     );
+  }
+
+  double _targetForIndex(int index) {
+    var consumed = 0;
+    for (var yearIndex = 0; yearIndex < widget.years.length; yearIndex++) {
+      final next = consumed + widget.years[yearIndex].days.length;
+      if (index < next) {
+        return math.max(
+          0,
+          (yearIndex * _itemExtent) - (_viewportHeight - _itemExtent) / 2,
+        );
+      }
+      consumed = next;
+    }
+    return 0;
   }
 
   LifeDot? _selectionForSemantics() {
@@ -232,72 +304,147 @@ class _LifeDotsViewState extends State<LifeDotsView> {
 
   static List<LifeDot> _flatten(List<LifeYear> years) =>
       List<LifeDot>.unmodifiable(years.expand((year) => year.days));
-
-  static double _initialOffset(List<LifeDot> days) {
-    final todayIndex = days.indexWhere((dot) => dot.isToday);
-    if (todayIndex < 0) return 0;
-    final todayRow = todayIndex ~/ _columns;
-    return math.max(0, todayRow * _rowExtent - (_viewportHeight * 0.68));
-  }
 }
 
-class _LifeDotCell extends StatelessWidget {
-  const _LifeDotCell({
-    super.key,
-    required this.dot,
-    required this.selected,
-    required this.onTap,
+class _LifeYearCanvas extends StatelessWidget {
+  const _LifeYearCanvas({
+    required this.year,
+    required this.columns,
+    required this.cellExtent,
+    required this.headerHeight,
+    required this.selectedDate,
+    required this.focusProgress,
+    required this.onSelected,
   });
 
-  final LifeDot dot;
-  final bool selected;
-  final VoidCallback onTap;
+  final LifeYear year;
+  final int columns;
+  final double cellExtent;
+  final double headerHeight;
+  final DateTime? selectedDate;
+  final double focusProgress;
+  final ValueChanged<LifeDot> onSelected;
 
   @override
   Widget build(BuildContext context) {
     final theme = NocturneScope.of(context);
-    final color = switch (dot.state) {
-      LifeDotState.unrecorded => theme.faint.withValues(alpha: 0.55),
-      LifeDotState.completed => theme.kept,
-      LifeDotState.missed => theme.missed,
-      LifeDotState.repaid => theme.blue,
-      LifeDotState.remaining => theme.faint.withValues(alpha: 0.18),
-    };
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: _describeDot(dot),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Center(
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            width: dot.isToday || selected ? 20 : _LifeDotsViewState._dotSize,
-            height: dot.isToday || selected ? 20 : _LifeDotsViewState._dotSize,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: dot.isToday || selected
-                  ? Border.all(
-                      color: selected ? theme.ink : theme.accent,
-                      width: selected ? 2 : 1.5,
-                    )
-                  : null,
-            ),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: dot.estimated ? color.withValues(alpha: 0.65) : color,
-              ),
-              child: const SizedBox.square(
-                dimension: _LifeDotsViewState._dotSize,
-              ),
-            ),
-          ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapUp: (details) {
+        final y = details.localPosition.dy - headerHeight;
+        if (y < 0) return;
+        final column = (details.localPosition.dx / cellExtent).floor();
+        final row = (y / cellExtent).floor();
+        final index = (row * columns) + column;
+        if (column < 0 || column >= columns || index >= year.days.length) {
+          return;
+        }
+        onSelected(year.days[index]);
+      },
+      child: CustomPaint(
+        painter: _LifeYearPainter(
+          year: year,
+          columns: columns,
+          cellExtent: cellExtent,
+          headerHeight: headerHeight,
+          selectedDate: selectedDate,
+          focusProgress: focusProgress,
+          theme: theme,
         ),
       ),
     );
+  }
+}
+
+class _LifeYearPainter extends CustomPainter {
+  const _LifeYearPainter({
+    required this.year,
+    required this.columns,
+    required this.cellExtent,
+    required this.headerHeight,
+    required this.selectedDate,
+    required this.focusProgress,
+    required this.theme,
+  });
+
+  final LifeYear year;
+  final int columns;
+  final double cellExtent;
+  final double headerHeight;
+  final DateTime? selectedDate;
+  final double focusProgress;
+  final NocturneThemeData theme;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final first = year.days.isEmpty ? null : year.days.first.date.year;
+    final label = first == null
+        ? 'AGE ${year.age}'
+        : 'AGE ${year.age.toString().padLeft(2, '0')}  ·  $first';
+    final labelPainter = TextPainter(
+      text: TextSpan(text: label, style: NocturneType.label(theme.faint)),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: size.width);
+    labelPainter.paint(canvas, const Offset(2, 3));
+
+    canvas.drawLine(
+      Offset(labelPainter.width + 12, 10),
+      Offset(size.width, 10),
+      Paint()
+        ..color = theme.line
+        ..strokeWidth = 1,
+    );
+
+    for (var index = 0; index < year.days.length; index++) {
+      final dot = year.days[index];
+      final column = index % columns;
+      final row = index ~/ columns;
+      final center = Offset(
+        (column * cellExtent) + (cellExtent / 2),
+        headerHeight + (row * cellExtent) + (cellExtent / 2),
+      );
+      final color = switch (dot.state) {
+        LifeDotState.unrecorded => theme.faint.withValues(alpha: 0.52),
+        LifeDotState.completed => theme.kept,
+        LifeDotState.missed => theme.missed,
+        LifeDotState.repaid => theme.blue,
+        LifeDotState.remaining => theme.faint.withValues(alpha: 0.14),
+      };
+      final selected =
+          selectedDate != null && _sameDay(dot.date, selectedDate!);
+      final highlighted = dot.isToday || selected;
+      final baseRadius = math.min(3.1, cellExtent * 0.25);
+      final radius = highlighted
+          ? baseRadius * (1 + (focusProgress * 0.22))
+          : baseRadius;
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()..color = dot.estimated ? color.withValues(alpha: 0.58) : color,
+      );
+      if (highlighted) {
+        canvas.drawCircle(
+          center,
+          radius + 1.4 + (focusProgress * 1.5),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = selected ? 1.7 : 1.2
+            ..color = (selected ? theme.ink : theme.accent).withValues(
+              alpha: 0.55 + (focusProgress * 0.45),
+            ),
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LifeYearPainter oldDelegate) {
+    return oldDelegate.year != year ||
+        oldDelegate.columns != columns ||
+        oldDelegate.cellExtent != cellExtent ||
+        oldDelegate.selectedDate != selectedDate ||
+        oldDelegate.focusProgress != focusProgress ||
+        oldDelegate.theme != theme;
   }
 }
 
@@ -305,6 +452,12 @@ class _MoveDayIntent extends Intent {
   const _MoveDayIntent(this.delta);
 
   final int delta;
+}
+
+class _MoveRowIntent extends Intent {
+  const _MoveRowIntent(this.direction);
+
+  final int direction;
 }
 
 class _TodayIntent extends Intent {

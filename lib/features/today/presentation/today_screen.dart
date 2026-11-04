@@ -11,6 +11,7 @@ import 'package:ayyam/design/tokens/nocturne_tokens.dart';
 import 'package:ayyam/design/type/nocturne_type.dart';
 import 'package:ayyam/features/dua/application/dua_reminder_platform.dart';
 import 'package:ayyam/features/dua/application/dua_library_service.dart';
+import 'package:ayyam/features/dua/application/dua_share_service.dart';
 import 'package:ayyam/features/dua/application/today_dua_controller.dart';
 import 'package:ayyam/features/dua/domain/dua.dart';
 import 'package:ayyam/features/dua/presentation/dua_library_screen.dart';
@@ -23,9 +24,16 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class TodayScreen extends ConsumerWidget {
-  const TodayScreen({super.key, required this.preferences});
+  const TodayScreen({
+    super.key,
+    required this.preferences,
+    this.showNavigation = true,
+    this.onSelectTab,
+  });
 
   final AppPreferences preferences;
+  final bool showNavigation;
+  final ValueChanged<int>? onSelectTab;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -88,6 +96,15 @@ class TodayScreen extends ConsumerWidget {
                             ),
                             const SizedBox(width: NocturneSpace.x3),
                           ],
+                          if (preferences.duaEnabled) ...<Widget>[
+                            CircleAction(
+                              glyph: NocturneGlyph.book,
+                              onTap: () => _openLibrary(context),
+                              semanticLabel: 'Open dua library',
+                              size: 38,
+                            ),
+                            const SizedBox(width: NocturneSpace.x2),
+                          ],
                           CircleAction(
                             glyph: NocturneGlyph.settings,
                             onTap: () => _openSettings(context),
@@ -139,6 +156,7 @@ class TodayScreen extends ConsumerWidget {
                           onOpenSettings: () => _openSettings(context),
                           onReportIssue: () =>
                               ref.read(todayDuaProvider.notifier).reportIssue(),
+                          onShare: (dua) => shareDua(context, dua),
                         ),
                         error: (error, stackTrace) => _UnavailableDua(
                           message: 'Local storage could not be opened. Your settings and key were not changed.',
@@ -170,36 +188,37 @@ class TodayScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: NocturneNavShell(
-                selectedIndex: 0,
-                items: <NocturneNavItem>[
-                  NocturneNavItem(
-                    label: 'Today',
-                    glyph: NocturneGlyph.calendar,
-                    onTap: () {},
-                  ),
-                  NocturneNavItem(
-                    label: preferences.lifeInDotsEnabled ? 'Life' : 'Library',
-                    glyph: preferences.lifeInDotsEnabled
-                        ? NocturneGlyph.dots
-                        : NocturneGlyph.book,
-                    semanticLabel: preferences.lifeInDotsEnabled
-                        ? 'Open Life in Dots'
-                        : 'Open dua library',
-                    onTap: preferences.lifeInDotsEnabled
-                        ? () => _openLife(context)
-                        : () => _openLibrary(context),
-                  ),
-                  NocturneNavItem(
-                    label: 'You',
-                    glyph: NocturneGlyph.settings,
-                    onTap: () => _openSettings(context),
-                  ),
-                ],
+            if (showNavigation)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: NocturneNavShell(
+                  selectedIndex: 0,
+                  items: <NocturneNavItem>[
+                    NocturneNavItem(
+                      label: 'Today',
+                      glyph: NocturneGlyph.calendar,
+                      onTap: () {},
+                    ),
+                    NocturneNavItem(
+                      label: preferences.lifeInDotsEnabled ? 'Life' : 'Library',
+                      glyph: preferences.lifeInDotsEnabled
+                          ? NocturneGlyph.dots
+                          : NocturneGlyph.book,
+                      semanticLabel: preferences.lifeInDotsEnabled
+                          ? 'Open Life in Dots'
+                          : 'Open dua library',
+                      onTap: preferences.lifeInDotsEnabled
+                          ? () => _openLife(context)
+                          : () => _openLibrary(context),
+                    ),
+                    NocturneNavItem(
+                      label: 'You',
+                      glyph: NocturneGlyph.settings,
+                      onTap: () => _openSettings(context),
+                    ),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -207,6 +226,10 @@ class TodayScreen extends ConsumerWidget {
   }
 
   void _openSettings(BuildContext context) {
+    if (onSelectTab != null) {
+      onSelectTab!(3);
+      return;
+    }
     Navigator.of(context).push<void>(
       nocturnePageRoute<void>(
         const RouteSettings(name: '/settings'),
@@ -225,6 +248,10 @@ class TodayScreen extends ConsumerWidget {
   }
 
   void _openLife(BuildContext context) {
+    if (onSelectTab != null) {
+      onSelectTab!(1);
+      return;
+    }
     Navigator.of(context).push<void>(
       nocturnePageRoute<void>(
         const RouteSettings(name: '/life'),
@@ -990,12 +1017,14 @@ class _DuaStateView extends StatelessWidget {
     required this.onRetry,
     required this.onOpenSettings,
     required this.onReportIssue,
+    required this.onShare,
   });
 
   final TodayDuaState state;
   final VoidCallback onRetry;
   final VoidCallback onOpenSettings;
   final VoidCallback onReportIssue;
+  final ValueChanged<Dua> onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -1008,6 +1037,7 @@ class _DuaStateView extends StatelessWidget {
       TodayDuaReady(:final dua) => _ReadyDua(
         dua: dua,
         onReportIssue: onReportIssue,
+        onShare: () => onShare(dua),
       ),
       TodayDuaFlagged() => const _FlaggedDua(),
       TodayDuaUnavailable(:final message, :final canRetry) => _UnavailableDua(
@@ -1117,10 +1147,15 @@ class _UnavailableDua extends StatelessWidget {
 }
 
 class _ReadyDua extends StatelessWidget {
-  const _ReadyDua({required this.dua, required this.onReportIssue});
+  const _ReadyDua({
+    required this.dua,
+    required this.onReportIssue,
+    required this.onShare,
+  });
 
   final Dua dua;
   final VoidCallback onReportIssue;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -1216,6 +1251,13 @@ class _ReadyDua extends StatelessWidget {
               ),
             ],
           ),
+        ),
+        const SizedBox(height: NocturneSpace.x2),
+        NocturneButton(
+          label: 'Share this dua',
+          style: NocturneButtonStyle.glass,
+          trailing: NocturneGlyph.share,
+          onTap: onShare,
         ),
         const SizedBox(height: NocturneSpace.x2),
         Align(

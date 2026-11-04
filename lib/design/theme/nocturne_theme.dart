@@ -63,6 +63,26 @@ class NocturneThemeData {
     pending: Color(0xFF8C7BFF),
     blue: Color(0xFF4CA6FF),
   );
+
+  static const NocturneThemeData light = NocturneThemeData(
+    brightness: Brightness.light,
+    canvas: Color(0xFFF2F1EA),
+    canvasRaised: Color(0xFFFAF9F3),
+    surface: Color(0xFFF8F7F1),
+    raised: Color(0xFFFFFFFF),
+    ink: Color(0xFF171817),
+    muted: Color(0xFF62645F),
+    faint: Color(0xFF92958D),
+    line: Color(0x1F171817),
+    lineStrong: Color(0x3D171817),
+    glass: Color(0x8AFFFFFF),
+    glassStrong: Color(0xC7FFFFFF),
+    accent: Color(0xFF5D6900),
+    kept: Color(0xFF087A55),
+    missed: Color(0xFFB42335),
+    pending: Color(0xFF6554C0),
+    blue: Color(0xFF1769AA),
+  );
 }
 
 class NocturneScope extends InheritedWidget {
@@ -117,12 +137,27 @@ abstract final class NocturneGradients {
     Color(0xFF08090B),
   ];
 
-  static List<Color> forTone(NocturneTone tone) => switch (tone) {
-    NocturneTone.pending => pending,
-    NocturneTone.kept => kept,
-    NocturneTone.missed => missed,
-    NocturneTone.rest => rest,
-  };
+  static List<Color> forTone(NocturneTone tone, NocturneThemeData theme) {
+    if (!theme.isDark) {
+      final wash = switch (tone) {
+        NocturneTone.pending => theme.pending,
+        NocturneTone.kept => theme.kept,
+        NocturneTone.missed => theme.missed,
+        NocturneTone.rest => theme.blue,
+      };
+      return <Color>[
+        Color.alphaBlend(wash.withValues(alpha: 0.10), theme.canvas),
+        theme.canvasRaised,
+        theme.canvas,
+      ];
+    }
+    return switch (tone) {
+      NocturneTone.pending => pending,
+      NocturneTone.kept => kept,
+      NocturneTone.missed => missed,
+      NocturneTone.rest => rest,
+    };
+  }
 
   static Color glowFor(NocturneTone tone, NocturneThemeData theme) {
     return switch (tone) {

@@ -105,6 +105,34 @@ void main() {
     expect(find.text('How was today’s prayer day?'), findsOneWidget);
     expect(container.read(selectedLifeReminderProvider), isFalse);
   });
+
+  testWidgets('keeps the four primary areas in one persistent shell', (
+    tester,
+  ) async {
+    await _pumpApp(tester, MemoryLifeRepository());
+
+    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Life'), findsOneWidget);
+    expect(find.text('Makeup'), findsOneWidget);
+    expect(find.text('You'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('Open Life in Dots').first);
+    await tester.pumpAndSettle();
+    expect(find.text('36,500+ DAYS'), findsOneWidget);
+    expect(find.bySemanticsLabel('Back'), findsNothing);
+
+    await tester.tap(find.bySemanticsLabel('Open Makeup tab'));
+    await tester.pumpAndSettle();
+    expect(find.text('A personal\npractice.'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('Open You'));
+    await tester.pumpAndSettle();
+    expect(find.text('Keep it\nyours.'), findsOneWidget);
+    expect(
+      Navigator.of(tester.element(find.text('Keep it\nyours.'))).canPop(),
+      isFalse,
+    );
+  });
 }
 
 Future<void> _pumpApp(

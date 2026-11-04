@@ -1,34 +1,50 @@
+import 'package:ayyam/core/settings/app_preferences.dart';
+import 'package:ayyam/core/settings/app_preferences_controller.dart';
 import 'package:ayyam/design/routes/nocturne_page_route.dart';
 import 'package:ayyam/design/theme/nocturne_theme.dart';
 import 'package:ayyam/design/type/nocturne_type.dart';
 import 'package:ayyam/app/root_gate.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class AyyamApp extends StatelessWidget {
+class AyyamApp extends ConsumerWidget {
   const AyyamApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    const theme = NocturneThemeData.dark;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode =
+        ref.watch(appPreferencesProvider).value?.themeMode ??
+        AppThemeMode.system;
 
     return WidgetsApp(
       title: 'Ayyam',
-      color: theme.canvas,
+      color: NocturneThemeData.dark.canvas,
       debugShowCheckedModeBanner: false,
-      textStyle: NocturneType.body(theme.ink),
+      textStyle: NocturneType.body(NocturneThemeData.dark.ink),
       pageRouteBuilder: nocturnePageRoute,
       localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
         DefaultWidgetsLocalizations.delegate,
       ],
-      builder: (context, child) => ScrollConfiguration(
-        behavior: const NocturneScrollBehavior(),
-        child: NocturneScope(
-          theme: theme,
-          tone: NocturneTone.pending,
-          child: child ?? const SizedBox.shrink(),
-        ),
-      ),
+      builder: (context, child) {
+        final platformBrightness = MediaQuery.platformBrightnessOf(context);
+        final brightness = switch (themeMode) {
+          AppThemeMode.system => platformBrightness,
+          AppThemeMode.light => Brightness.light,
+          AppThemeMode.dark => Brightness.dark,
+        };
+        final theme = brightness == Brightness.dark
+            ? NocturneThemeData.dark
+            : NocturneThemeData.light;
+        return ScrollConfiguration(
+          behavior: const NocturneScrollBehavior(),
+          child: NocturneScope(
+            theme: theme,
+            tone: NocturneTone.pending,
+            child: child ?? const SizedBox.shrink(),
+          ),
+        );
+      },
       home: const RootGate(),
     );
   }

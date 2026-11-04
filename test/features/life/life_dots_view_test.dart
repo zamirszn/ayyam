@@ -34,11 +34,9 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const ValueKey('life-dot-today')), findsOneWidget);
-    expect(find.byType(GridView), findsOneWidget);
-    expect(
-      tester.getSize(find.byKey(const ValueKey('life-dot-today'))).width,
-      greaterThanOrEqualTo(20),
-    );
+    expect(find.byType(ListView), findsOneWidget);
+    expect(find.byKey(const ValueKey('life-dots-800')), findsOneWidget);
+    expect(find.byType(CustomPaint).evaluate().length, lessThan(20));
   });
 
   testWidgets('selects adjacent days with keyboard and semantics actions', (

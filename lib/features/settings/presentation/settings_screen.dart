@@ -27,9 +27,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
-  const SettingsScreen({super.key, required this.initialPreferences});
+  const SettingsScreen({
+    super.key,
+    required this.initialPreferences,
+    this.embedded = false,
+  });
 
   final AppPreferences initialPreferences;
+  final bool embedded;
 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
@@ -46,6 +51,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late int _lifeReminderMinute;
   late String _language;
   late DateTime? _birthDate;
+  late AppThemeMode _themeMode;
   late final TextEditingController _apiKeyController;
   late final TextEditingController _missedYearsController;
 
@@ -83,6 +89,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _lifeReminderMinute = _savedPreferences.lifeReminderMinute;
     _language = _savedPreferences.translationLanguage;
     _birthDate = _savedPreferences.dateOfBirth;
+    _themeMode = _savedPreferences.themeMode;
     _apiKeyController = TextEditingController();
     _missedYearsController = TextEditingController(
       text: _savedPreferences.missedPrayerYears == 0
@@ -186,30 +193,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return NocturneScaffold(
       tone: NocturneTone.rest,
+      includeBottomSafeArea: !widget.embedded,
       child: AnimatedPadding(
         duration: NocturneDuration.fast,
         curve: Curves.easeOutCubic,
         padding: EdgeInsets.only(bottom: keyboard),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(
+          padding: EdgeInsets.fromLTRB(
             NocturneSpace.gutter,
             NocturneSpace.x2,
             NocturneSpace.gutter,
-            NocturneSpace.x5,
+            widget.embedded
+                ? NocturneSpace.navHeight + NocturneSpace.x3
+                : NocturneSpace.x5,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Row(
                 children: <Widget>[
-                  CircleAction(
-                    glyph: NocturneGlyph.chevronLeft,
-                    onTap: _saving || _backingUp || _deletingAll
-                        ? null
-                        : () => Navigator.of(context).maybePop(),
-                    semanticLabel: 'Back',
-                    size: 38,
-                  ),
+                  if (!widget.embedded)
+                    CircleAction(
+                      glyph: NocturneGlyph.chevronLeft,
+                      onTap: _saving || _backingUp || _deletingAll
+                          ? null
+                          : () => Navigator.of(context).maybePop(),
+                      semanticLabel: 'Back',
+                      size: 38,
+                    )
+                  else
+                    Text('YOU', style: NocturneType.label(theme.ink)),
                   const Spacer(),
                   Text(
                     'SETTINGS / (001)',
@@ -235,7 +248,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       const SizedBox(height: NocturneSpace.x6),
                       const _PrivacyCard(),
                       const SizedBox(height: NocturneSpace.x8),
-                      const _SectionLabel(index: '01', label: 'Features'),
+                      const _SectionLabel(index: '01', label: 'Appearance'),
+                      const SizedBox(height: NocturneSpace.x3),
+                      Wrap(
+                        spacing: NocturneSpace.x2,
+                        runSpacing: NocturneSpace.x2,
+                        children: <Widget>[
+                          for (final mode in AppThemeMode.values)
+                            _ChoicePill(
+                              label: switch (mode) {
+                                AppThemeMode.system => 'Device',
+                                AppThemeMode.light => 'Light',
+                                AppThemeMode.dark => 'Dark',
+                              },
+                              selected: _themeMode == mode,
+                              onTap: () => setState(() {
+                                _themeMode = mode;
+                                _clearFeedback();
+                              }),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: NocturneSpace.x2),
+                      Text(
+                        'Device follows the appearance selected by your operating system.',
+                        style: NocturneType.caption(theme.faint),
+                      ),
+                      const SizedBox(height: NocturneSpace.x8),
+                      const _SectionLabel(index: '02', label: 'Features'),
                       const SizedBox(height: NocturneSpace.x3),
                       _FeatureRow(
                         glyph: NocturneGlyph.book,
@@ -808,6 +848,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _lifeReminderMinute = preferences.lifeReminderMinute;
         _language = preferences.translationLanguage;
         _birthDate = preferences.dateOfBirth;
+        _themeMode = preferences.themeMode;
         _missedYearsController.text = preferences.missedPrayerYears == 0
             ? ''
             : '${preferences.missedPrayerYears}';
@@ -918,6 +959,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       lifeReminderEnabled: _lifeReminderEnabled,
       lifeReminderHour: _lifeReminderHour,
       lifeReminderMinute: _lifeReminderMinute,
+      themeMode: _themeMode,
     );
 
     setState(() {

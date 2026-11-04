@@ -254,6 +254,7 @@ Map<String, Object?> _preferencesToJson(
   'lifeReminderEnabled': value.lifeReminderEnabled,
   'lifeReminderHour': value.lifeReminderHour,
   'lifeReminderMinute': value.lifeReminderMinute,
+  'themeMode': value.themeMode.name,
 };
 
 AppPreferences _preferencesFromJson(Map<String, Object?> json) {
@@ -279,6 +280,11 @@ AppPreferences _preferencesFromJson(Map<String, Object?> json) {
     json,
     'lifeReminderMinute',
     AppPreferences.defaults.lifeReminderMinute,
+  );
+  final themeModeName = _optionalString(json, 'themeMode');
+  final themeMode = AppThemeMode.values.firstWhere(
+    (mode) => mode.name == themeModeName,
+    orElse: () => AppPreferences.defaults.themeMode,
   );
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
     throw const FormatException('Reminder time is invalid.');
@@ -307,6 +313,7 @@ AppPreferences _preferencesFromJson(Map<String, Object?> json) {
     lifeReminderEnabled: lifeReminderEnabled,
     lifeReminderHour: lifeReminderHour,
     lifeReminderMinute: lifeReminderMinute,
+    themeMode: themeMode,
   );
 }
 

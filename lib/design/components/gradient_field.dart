@@ -21,7 +21,7 @@ class GradientField extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: NocturneGradients.forTone(tone),
+            colors: NocturneGradients.forTone(tone, theme),
             stops: const <double>[0, 0.48, 1],
           ),
         ),
@@ -29,7 +29,9 @@ class GradientField extends StatelessWidget {
           fit: StackFit.expand,
           children: <Widget>[
             RepaintBoundary(
-              child: CustomPaint(painter: _AtmospherePainter(glow)),
+              child: CustomPaint(
+                painter: _AtmospherePainter(glow, theme.isDark),
+              ),
             ),
             child,
           ],
@@ -40,9 +42,10 @@ class GradientField extends StatelessWidget {
 }
 
 class _AtmospherePainter extends CustomPainter {
-  const _AtmospherePainter(this.glow);
+  const _AtmospherePainter(this.glow, this.isDark);
 
   final Color glow;
+  final bool isDark;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -69,7 +72,8 @@ class _AtmospherePainter extends CustomPainter {
     );
     canvas.drawArc(horizonRect, math.pi, math.pi, false, horizonPaint);
 
-    final grainPaint = Paint()..color = const Color(0x09FFFFFF);
+    final grainPaint = Paint()
+      ..color = isDark ? const Color(0x09FFFFFF) : const Color(0x09000000);
     for (var y = 10; y < size.height; y += 18) {
       for (var x = 8; x < size.width; x += 18) {
         if (((x * 31) + (y * 17)) % 7 == 0) {
@@ -85,5 +89,5 @@ class _AtmospherePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_AtmospherePainter oldDelegate) =>
-      oldDelegate.glow != glow;
+      oldDelegate.glow != glow || oldDelegate.isDark != isDark;
 }

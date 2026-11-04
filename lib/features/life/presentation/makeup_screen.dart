@@ -11,7 +11,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class MakeupScreen extends ConsumerWidget {
-  const MakeupScreen({super.key});
+  const MakeupScreen({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -19,24 +21,30 @@ class MakeupScreen extends ConsumerWidget {
     final dashboard = ref.watch(lifeDashboardProvider);
     return NocturneScaffold(
       tone: NocturneTone.rest,
+      includeBottomSafeArea: !embedded,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
+        padding: EdgeInsets.fromLTRB(
           NocturneSpace.gutter,
           NocturneSpace.x2,
           NocturneSpace.gutter,
-          NocturneSpace.x5,
+          embedded
+              ? NocturneSpace.navHeight + NocturneSpace.x4
+              : NocturneSpace.x5,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Row(
               children: <Widget>[
-                CircleAction(
-                  glyph: NocturneGlyph.chevronLeft,
-                  onTap: () => Navigator.of(context).maybePop(),
-                  semanticLabel: 'Back',
-                  size: 38,
-                ),
+                if (!embedded)
+                  CircleAction(
+                    glyph: NocturneGlyph.chevronLeft,
+                    onTap: () => Navigator.of(context).maybePop(),
+                    semanticLabel: 'Back',
+                    size: 38,
+                  )
+                else
+                  Text('MAKEUP', style: NocturneType.label(theme.ink)),
                 const Spacer(),
                 Text('MAKE-UP / 006', style: NocturneType.label(theme.muted)),
               ],

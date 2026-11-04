@@ -8,6 +8,7 @@ import 'package:ayyam/design/theme/nocturne_theme.dart';
 import 'package:ayyam/design/tokens/nocturne_tokens.dart';
 import 'package:ayyam/design/type/nocturne_type.dart';
 import 'package:ayyam/features/dua/application/dua_library_service.dart';
+import 'package:ayyam/features/dua/application/dua_share_service.dart';
 import 'package:ayyam/features/dua/application/today_dua_controller.dart';
 import 'package:ayyam/features/dua/data/dua_repository.dart';
 import 'package:ayyam/features/dua/domain/dua.dart';
@@ -202,6 +203,13 @@ class _DuaDetailScreenState extends ConsumerState<DuaDetailScreen> {
                       ],
                     ],
                     if (!_dua.flagged) ...<Widget>[
+                      const SizedBox(height: NocturneSpace.x4),
+                      NocturneButton(
+                        label: 'Share this dua',
+                        style: NocturneButtonStyle.glass,
+                        trailing: NocturneGlyph.share,
+                        onTap: () => shareDua(context, _dua),
+                      ),
                       const SizedBox(height: NocturneSpace.x2),
                       Align(
                         alignment: Alignment.center,

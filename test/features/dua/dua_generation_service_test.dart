@@ -93,6 +93,46 @@ void main() {
     );
     expect(client.calls, 1);
   });
+
+  test(
+    'retries refused generation and preserves the final fallback category',
+    () async {
+      final client = _QueueDuaClient(<Object>[
+        const DuaGenerationException(
+          DuaGenerationError.refused,
+          'No content candidate was returned.',
+        ),
+        const DuaGenerationException(
+          DuaGenerationError.malformed,
+          'Structured content was malformed.',
+        ),
+        const DuaGenerationException(
+          DuaGenerationError.refused,
+          'No content candidate was returned.',
+        ),
+        const DuaGenerationException(
+          DuaGenerationError.malformed,
+          'Structured content was malformed.',
+        ),
+        _knowledgeCandidate(),
+      ]);
+      final service = DuaGenerationService(
+        repository: MemoryDuaRepository(),
+        client: client,
+        validator: const DuaValidator(),
+      );
+
+      final result = await service.prepareForDate(
+        date: DateTime(2026, 11, 2),
+        apiKey: 'test-key',
+        language: 'English',
+      );
+
+      expect(result.arabic, _knowledgeCandidate().arabic);
+      expect(client.calls, 5);
+      expect(client.categories.last, 'gratitude');
+    },
+  );
 }
 
 class _QueueDuaClient implements DuaGeneratorClient {
@@ -100,6 +140,7 @@ class _QueueDuaClient implements DuaGeneratorClient {
 
   final List<Object> responses;
   int calls = 0;
+  final List<String> categories = <String>[];
 
   @override
   Future<GeneratedDuaCandidate> generate({
@@ -109,6 +150,7 @@ class _QueueDuaClient implements DuaGeneratorClient {
     required String category,
     required int attempt,
   }) async {
+    categories.add(category);
     final response = responses[calls++];
     if (response is DuaGenerationException) throw response;
     return response as GeneratedDuaCandidate;

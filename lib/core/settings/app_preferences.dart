@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+enum AppThemeMode { system, light, dark }
+
 @immutable
 class AppPreferences {
   const AppPreferences({
@@ -14,6 +16,7 @@ class AppPreferences {
     this.lifeReminderEnabled = false,
     this.lifeReminderHour = 20,
     this.lifeReminderMinute = 0,
+    this.themeMode = AppThemeMode.system,
   });
 
   final bool onboardingComplete;
@@ -27,6 +30,7 @@ class AppPreferences {
   final bool lifeReminderEnabled;
   final int lifeReminderHour;
   final int lifeReminderMinute;
+  final AppThemeMode themeMode;
 
   static const AppPreferences defaults = AppPreferences(
     onboardingComplete: false,
@@ -40,6 +44,7 @@ class AppPreferences {
     lifeReminderEnabled: false,
     lifeReminderHour: 20,
     lifeReminderMinute: 0,
+    themeMode: AppThemeMode.system,
   );
 
   AppPreferences copyWith({
@@ -55,6 +60,7 @@ class AppPreferences {
     bool? lifeReminderEnabled,
     int? lifeReminderHour,
     int? lifeReminderMinute,
+    AppThemeMode? themeMode,
   }) {
     return AppPreferences(
       onboardingComplete: onboardingComplete ?? this.onboardingComplete,
@@ -68,6 +74,7 @@ class AppPreferences {
       lifeReminderEnabled: lifeReminderEnabled ?? this.lifeReminderEnabled,
       lifeReminderHour: lifeReminderHour ?? this.lifeReminderHour,
       lifeReminderMinute: lifeReminderMinute ?? this.lifeReminderMinute,
+      themeMode: themeMode ?? this.themeMode,
     );
   }
 }
@@ -104,5 +111,6 @@ class OnboardingSetup {
     lifeReminderEnabled: false,
     lifeReminderHour: 20,
     lifeReminderMinute: 0,
+    themeMode: AppThemeMode.system,
   );
 }

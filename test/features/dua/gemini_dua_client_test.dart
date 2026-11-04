@@ -12,20 +12,16 @@ void main() {
       client: MockClient((request) async {
         expect(request.url.queryParameters, isNot(contains('key')));
         expect(request.headers['x-goog-api-key'], 'test-key');
-        if (request.method == 'GET') {
-          return http.Response(
-            jsonEncode(_modelList(<String>['gemini-3-flash-preview'])),
-            200,
-          );
-        }
         expect(
           request.url.path,
-          '/v1beta/models/gemini-3-flash-preview:generateContent',
+          '/v1beta/models/gemini-2.5-flash:generateContent',
         );
         final body = jsonDecode(request.body) as Map<String, Object?>;
         final config = body['generationConfig']! as Map<String, Object?>;
         expect(config['responseMimeType'], 'application/json');
-        expect(config['responseJsonSchema'], isA<Map<String, Object?>>());
+        expect(config, isNot(contains('responseJsonSchema')));
+        final schema = config['responseSchema']! as Map<String, Object?>;
+        expect(schema['type'], 'OBJECT');
         return _generationResponse();
       }),
     );
@@ -42,92 +38,131 @@ void main() {
     expect(result.sources.single.type, DuaSourceType.quran);
   });
 
-  test('re-resolves once when a listed model returns 404', () async {
-    var generationCalls = 0;
+  test(
+    'falls back to the stable alias and caches only the successful model',
+    () async {
+      final generationPaths = <String>[];
+      final client = GeminiDuaClient(
+        client: MockClient((request) async {
+          generationPaths.add(request.url.path);
+          if (request.url.path.contains('gemini-2.5-flash')) {
+            return http.Response(
+              jsonEncode(<String, Object?>{
+                'error': <String, Object?>{'message': 'Model was not found.'},
+              }),
+              404,
+            );
+          }
+          expect(
+            request.url.path,
+            '/v1beta/models/gemini-flash-latest:generateContent',
+          );
+          return _generationResponse();
+        }),
+      );
+
+      final result = await client.generate(
+        apiKey: 'test-key',
+        language: 'English',
+        exclusionHints: const <String>[],
+        category: 'guidance',
+        attempt: 0,
+      );
+      await client.generate(
+        apiKey: 'test-key',
+        language: 'English',
+        exclusionHints: const <String>[],
+        category: 'guidance',
+        attempt: 1,
+      );
+
+      expect(result.arabic, 'رَبِّ زِدْنِي عِلْمًا');
+      expect(generationPaths, <String>[
+        '/v1beta/models/gemini-2.5-flash:generateContent',
+        '/v1beta/models/gemini-flash-latest:generateContent',
+        '/v1beta/models/gemini-flash-latest:generateContent',
+      ]);
+    },
+  );
+
+  test(
+    'discovers another model when built-in choices are unavailable',
+    () async {
+      var generationCalls = 0;
+      final client = GeminiDuaClient(
+        client: MockClient((request) async {
+          if (request.method == 'GET') {
+            return http.Response(
+              jsonEncode(
+                _modelList(<String>['gemini-3.8-flash', 'gemini-3.7-flash']),
+              ),
+              200,
+            );
+          }
+          generationCalls++;
+          if (request.url.path.contains('gemini-2.5-flash') ||
+              request.url.path.contains('gemini-flash-latest') ||
+              request.url.path.contains('gemini-3.8-flash')) {
+            return http.Response(
+              jsonEncode(<String, Object?>{
+                'error': <String, Object?>{
+                  'message': 'The model is temporarily overloaded.',
+                },
+              }),
+              503,
+            );
+          }
+          expect(
+            request.url.path,
+            '/v1beta/models/gemini-3.7-flash:generateContent',
+          );
+          return _generationResponse();
+        }),
+      );
+
+      final result = await client.generate(
+        apiKey: 'test-key',
+        language: 'English',
+        exclusionHints: const <String>[],
+        category: 'guidance',
+        attempt: 0,
+      );
+
+      expect(result.arabic, 'رَبِّ زِدْنِي عِلْمًا');
+      expect(generationCalls, 4);
+    },
+  );
+
+  test('does not mistake a rejected request for an invalid API key', () async {
     final client = GeminiDuaClient(
-      client: MockClient((request) async {
-        if (request.method == 'GET') {
-          return http.Response(
-            jsonEncode(
-              _modelList(<String>['gemini-2.5-flash', 'gemini-flash-latest']),
-            ),
-            200,
-          );
-        }
-        generationCalls++;
-        if (request.url.path.contains('gemini-2.5-flash')) {
-          return http.Response(
-            jsonEncode(<String, Object?>{
-              'error': <String, Object?>{'message': 'Model was not found.'},
-            }),
-            404,
-          );
-        }
-        expect(
-          request.url.path,
-          '/v1beta/models/gemini-flash-latest:generateContent',
-        );
-        return _generationResponse();
-      }),
+      client: MockClient(
+        (request) async => http.Response(
+          jsonEncode(<String, Object?>{
+            'error': <String, Object?>{
+              'message': 'generationConfig.responseSchema is invalid.',
+            },
+          }),
+          400,
+        ),
+      ),
     );
 
-    final result = await client.generate(
-      apiKey: 'test-key',
-      language: 'English',
-      exclusionHints: const <String>[],
-      category: 'guidance',
-      attempt: 0,
+    await expectLater(
+      client.generate(
+        apiKey: 'valid-key',
+        language: 'English',
+        exclusionHints: const <String>[],
+        category: 'guidance',
+        attempt: 0,
+      ),
+      throwsA(
+        isA<DuaGenerationException>().having(
+          (error) => error.error,
+          'error',
+          DuaGenerationError.malformed,
+        ),
+      ),
     );
-
-    expect(result.arabic, 'رَبِّ زِدْنِي عِلْمًا');
-    expect(generationCalls, 2);
-  });
-
-  test('falls back to another listed model after a 503', () async {
-    var generationCalls = 0;
-    final client = GeminiDuaClient(
-      client: MockClient((request) async {
-        if (request.method == 'GET') {
-          return http.Response(
-            jsonEncode(
-              _modelList(<String>[
-                'gemini-3.8-flash',
-                'gemini-3-flash',
-                'gemini-2.5-flash',
-              ]),
-            ),
-            200,
-          );
-        }
-        generationCalls++;
-        if (request.url.path.contains('gemini-2.5-flash')) {
-          return http.Response(
-            jsonEncode(<String, Object?>{
-              'error': <String, Object?>{
-                'message': 'The model is temporarily overloaded.',
-              },
-            }),
-            503,
-          );
-        }
-        expect(
-          request.url.path,
-          '/v1beta/models/gemini-3.8-flash:generateContent',
-        );
-        return _generationResponse();
-      }),
-    );
-
-    final result = await client.generate(
-      apiKey: 'test-key',
-      language: 'English',
-      exclusionHints: const <String>[],
-      category: 'guidance',
-      attempt: 0,
-    );
-
-    expect(result.arabic, 'رَبِّ زِدْنِي عِلْمًا');
-    expect(generationCalls, 2);
   });
 
   test('maps authentication failures without exposing the key', () async {
@@ -135,7 +170,9 @@ void main() {
       client: MockClient(
         (request) async => http.Response(
           jsonEncode(<String, Object?>{
-            'error': <String, Object?>{'message': 'API key not valid.'},
+            'error': <String, Object?>{
+              'message': 'API key secret-key is not valid.',
+            },
           }),
           403,
         ),

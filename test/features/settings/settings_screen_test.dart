@@ -42,6 +42,7 @@ void main() {
     expect(find.text('Keep it\nyours.'), findsOneWidget);
     expect(find.text('31 / 12 / 1990'), findsOneWidget);
 
+    await tester.ensureVisible(find.byType(NocturneSwitch).at(1));
     await tester.tap(find.byType(NocturneSwitch).at(1));
     await tester.pumpAndSettle();
 
@@ -95,6 +96,7 @@ void main() {
 
     await tester.tap(find.bySemanticsLabel('Open settings'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(NocturneSwitch).first);
     await tester.tap(find.byType(NocturneSwitch).first);
     await tester.pumpAndSettle();
 
@@ -126,6 +128,28 @@ void main() {
     expect(repository.value.lifeReminderEnabled, isTrue);
     expect(repository.value.lifeReminderHour, 20);
     expect(repository.value.lifeReminderMinute, 0);
+  });
+
+  testWidgets('persists an explicit appearance mode', (tester) async {
+    final repository = MemoryAppPreferencesRepository(
+      AppPreferences.defaults.copyWith(
+        onboardingComplete: true,
+        duaEnabled: false,
+        lifeInDotsEnabled: true,
+        dateOfBirth: DateTime(1990, 1, 1),
+      ),
+    );
+    await _pumpApp(tester, repository, _MemoryApiKeyVault(null));
+
+    await tester.tap(find.bySemanticsLabel('Open settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Device'), findsOneWidget);
+
+    await tester.tap(find.text('Dark'));
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+
+    expect(repository.value.themeMode, AppThemeMode.dark);
   });
 
   testWidgets('requires a second tap before replacing data from a backup', (

@@ -15,6 +15,7 @@ enum NocturneGlyph {
   close,
   calendar,
   clock,
+  share,
 }
 
 class NocturneIcon extends StatelessWidget {
@@ -186,6 +187,16 @@ class _NocturneIconPainter extends CustomPainter {
           ..moveTo(12, 7)
           ..lineTo(12, 12)
           ..lineTo(15.5, 14);
+      case NocturneGlyph.share:
+        canvas
+          ..drawCircle(const Offset(6, 12), 2.3, paint)
+          ..drawCircle(const Offset(17, 6), 2.3, paint)
+          ..drawCircle(const Offset(17, 18), 2.3, paint);
+        path
+          ..moveTo(8.1, 10.9)
+          ..lineTo(14.9, 7.1)
+          ..moveTo(8.1, 13.1)
+          ..lineTo(14.9, 16.9);
     }
 
     canvas.drawPath(path, paint);
