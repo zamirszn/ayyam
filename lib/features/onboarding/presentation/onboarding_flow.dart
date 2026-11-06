@@ -312,7 +312,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       headline: 'Keep the\nday on time.',
       supporting: isAndroid
           ? 'Android will ask for these when the reminder engine is activated.'
-          : 'Web reminders are best-effort. Your daily dua will always be available when the app opens.',
+          : 'Your browser can deliver reminders while Ayyam remains open.',
       onBack: _goBack,
       actionLabel: _finishing ? 'Saving…' : 'Finish setup',
       onAction: _finishing ? null : _finish,
@@ -324,8 +324,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             title: 'Notifications',
             body: isAndroid
                 ? 'Show the translation preview at your chosen time.'
-                : 'Used only where the browser supports local notifications.',
-            status: isAndroid ? 'ASK ON FINISH' : 'BEST EFFORT',
+                : 'Allow browser notifications for this site.',
+            status: isAndroid || isWebRuntime
+                ? 'ASK ON FINISH'
+                : 'NOT AVAILABLE',
           ),
           const SizedBox(height: NocturneSpace.x3),
           _PermissionCard(
@@ -503,14 +505,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     });
     try {
       if (_duaEnabled) {
-        await ref.read(apiKeyVaultProvider).write(_apiKeyController.text);
-        if (isAndroidRuntime) {
+        if (isAndroidRuntime || isWebRuntime) {
           try {
             await ref.read(duaReminderPlatformProvider).requestPermissions();
           } catch (_) {
-            // Setup remains usable when Android declines a permission prompt.
+            // Setup remains usable when the platform declines permission.
           }
         }
+        await ref.read(apiKeyVaultProvider).write(_apiKeyController.text);
       }
       final birthDate = _lifeEnabled ? _birthDate : null;
       final missedYears = _lifeEnabled

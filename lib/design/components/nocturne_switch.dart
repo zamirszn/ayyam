@@ -19,6 +19,13 @@ class NocturneSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = NocturneScope.of(context);
+    final trackOff = theme.isDark
+        ? const Color(0x1FFFFFFF)
+        : const Color(0x22000000);
+    final thumbColor = value
+        ? theme.canvas
+        : (theme.isDark ? theme.ink : theme.raised);
+
     return Pressable(
       onTap: onChanged == null ? null : () => onChanged?.call(!value),
       semanticLabel: semanticLabel,
@@ -41,13 +48,9 @@ class NocturneSwitch extends StatelessWidget {
                 height: 26,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: Color.lerp(
-                      theme.glassStrong,
-                      theme.pending,
-                      progress,
-                    ),
+                    color: Color.lerp(trackOff, theme.accent, progress),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: theme.lineStrong),
+                    border: Border.all(color: theme.line, width: 1),
                   ),
                   child: Align(
                     alignment: Alignment(-1 + (2 * progress), 0),
@@ -56,8 +59,15 @@ class NocturneSwitch extends StatelessWidget {
                       height: 20,
                       margin: const EdgeInsets.symmetric(horizontal: 2),
                       decoration: BoxDecoration(
-                        color: theme.ink,
+                        color: thumbColor,
                         shape: BoxShape.circle,
+                        boxShadow: const <BoxShadow>[
+                          BoxShadow(
+                            color: Color(0x33000000),
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
                       ),
                     ),
                   ),

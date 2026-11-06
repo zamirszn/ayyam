@@ -1,5 +1,6 @@
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:ayyam/core/platform/runtime_platform.dart';
+import 'package:ayyam/features/dua/application/browser_notification_bridge.dart';
 import 'package:ayyam/features/dua/domain/dua.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -82,6 +83,8 @@ abstract interface class DuaReminderPlatform {
     required int minute,
   });
 
+  Future<bool> showTestNotification();
+
   Future<void> openNotificationSettings();
 
   Future<void> openBatteryOptimizationSettings();
@@ -102,22 +105,32 @@ class FlutterDuaReminderPlatform implements DuaReminderPlatform {
     this._onDaySelected,
     this._onLifeSelected,
     this._plugin,
-  );
+  ) {
+    _browser = BrowserNotificationBridge(_selectPayload);
+  }
 
   static const String _payloadPrefix = 'ayyam:dua:';
   static const String _lifePayload = 'ayyam:life:today';
   static const String _channelId = 'ayyam_daily_dua';
   static const String _lifeChannelId = 'ayyam_prayer_check_in';
   static const int _lifeNotificationId = 910001;
+  static const int _testNotificationId = 910002;
 
   final void Function(DateTime day) _onDaySelected;
   final void Function() _onLifeSelected;
   final FlutterLocalNotificationsPlugin _plugin;
+  late final BrowserNotificationBridge _browser;
   bool _initialized = false;
 
   @override
   Future<void> initialize() async {
-    if (_initialized || !isAndroidRuntime) return;
+    if (_initialized) return;
+    if (isWebRuntime) {
+      await _browser.initialize();
+      _initialized = true;
+      return;
+    }
+    if (!isAndroidRuntime) return;
     tz.initializeTimeZones();
     try {
       final timezone = await FlutterTimezone.getLocalTimezone();
@@ -129,6 +142,7 @@ class FlutterDuaReminderPlatform implements DuaReminderPlatform {
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('ic_stat_ayyam'),
+        web: WebInitializationSettings(),
       ),
       onDidReceiveNotificationResponse: (response) {
         _selectPayload(response.payload);
@@ -144,6 +158,14 @@ class FlutterDuaReminderPlatform implements DuaReminderPlatform {
 
   @override
   Future<ReminderDeliveryStatus> deliveryStatus() async {
+    if (isWebRuntime) {
+      await initialize();
+      return ReminderDeliveryStatus(
+        supported: _browser.supported,
+        notificationsAllowed: _browser.notificationsAllowed,
+        exactAlarmsAllowed: false,
+      );
+    }
     if (!isAndroidRuntime) {
       return const ReminderDeliveryStatus.unsupported();
     }
@@ -161,6 +183,10 @@ class FlutterDuaReminderPlatform implements DuaReminderPlatform {
 
   @override
   Future<ReminderDeliveryStatus> requestPermissions() async {
+    if (isWebRuntime) {
+      await _browser.requestPermissions();
+      return deliveryStatus();
+    }
     if (!isAndroidRuntime) {
       return const ReminderDeliveryStatus.unsupported();
     }
@@ -180,6 +206,33 @@ class FlutterDuaReminderPlatform implements DuaReminderPlatform {
     required int hour,
     required int minute,
   }) async {
+    if (isWebRuntime) {
+      final now = DateTime.now();
+      final requests = <BrowserNotificationRequest>[];
+      for (final dua in duas) {
+        if (dua.flagged) continue;
+        final date = dua.assignedDate;
+        final scheduled = DateTime(
+          date.year,
+          date.month,
+          date.day,
+          hour,
+          minute,
+        );
+        if (!scheduled.isAfter(now)) continue;
+        requests.add(
+          BrowserNotificationRequest(
+            id: notificationIdForDay(date),
+            scheduledAt: scheduled,
+            title: 'Today’s sourced dua',
+            body: notificationPreview(dua.translation),
+            payload: notificationPayloadForDay(date),
+          ),
+        );
+      }
+      await _browser.replaceScheduled(requests);
+      return;
+    }
     if (!isAndroidRuntime) return;
     await initialize();
     await cancelScheduled();
@@ -224,6 +277,10 @@ class FlutterDuaReminderPlatform implements DuaReminderPlatform {
 
   @override
   Future<void> cancelScheduled() async {
+    if (isWebRuntime) {
+      await _browser.cancelScheduled();
+      return;
+    }
     if (!isAndroidRuntime) return;
     await initialize();
     final pending = await _plugin.pendingNotificationRequests();
@@ -240,6 +297,18 @@ class FlutterDuaReminderPlatform implements DuaReminderPlatform {
     required int hour,
     required int minute,
   }) async {
+    if (isWebRuntime) {
+      await _browser.replaceDaily(
+        enabled: enabled,
+        hour: hour,
+        minute: minute,
+        id: _lifeNotificationId,
+        title: 'How was today’s prayer day?',
+        body: 'Take a quiet moment to record today in Life in Dots.',
+        payload: _lifePayload,
+      );
+      return;
+    }
     if (!isAndroidRuntime) return;
     await initialize();
     await _plugin.cancel(id: _lifeNotificationId);
@@ -283,7 +352,48 @@ class FlutterDuaReminderPlatform implements DuaReminderPlatform {
   }
 
   @override
+  Future<bool> showTestNotification() async {
+    var status = await deliveryStatus();
+    if (!status.supported) return false;
+    if (status.notificationsAllowed != true) {
+      status = await requestPermissions();
+    }
+    if (status.notificationsAllowed != true) return false;
+
+    if (isWebRuntime) {
+      return _browser.showNow(
+        id: _testNotificationId,
+        title: 'Ayyam reminders are ready',
+        body: 'You’ll receive your saved reminders at the selected local time.',
+        payload: '',
+      );
+    }
+    if (!isAndroidRuntime) return false;
+    await initialize();
+    await _plugin.show(
+      id: _testNotificationId,
+      title: 'Ayyam reminders are ready',
+      body: 'You’ll receive your saved reminders at the selected local time.',
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          'Daily dua',
+          channelDescription: 'A sourced supplication prepared for the day.',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+          category: AndroidNotificationCategory.reminder,
+        ),
+      ),
+    );
+    return true;
+  }
+
+  @override
   Future<void> openNotificationSettings() async {
+    if (isWebRuntime) {
+      await _browser.requestPermissions();
+      return;
+    }
     if (!isAndroidRuntime) return;
     await initialize();
     final android = _plugin

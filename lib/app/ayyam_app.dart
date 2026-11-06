@@ -16,12 +16,15 @@ class AyyamApp extends ConsumerWidget {
     final themeMode =
         ref.watch(appPreferencesProvider).value?.themeMode ??
         AppThemeMode.system;
+    final shellTheme = themeMode == AppThemeMode.light
+        ? NocturneThemeData.light
+        : NocturneThemeData.dark;
 
     return WidgetsApp(
       title: 'Ayyam',
-      color: NocturneThemeData.dark.canvas,
+      color: shellTheme.canvas,
       debugShowCheckedModeBanner: false,
-      textStyle: NocturneType.body(NocturneThemeData.dark.ink),
+      textStyle: NocturneType.body(shellTheme.ink),
       pageRouteBuilder: nocturnePageRoute,
       localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
         DefaultWidgetsLocalizations.delegate,

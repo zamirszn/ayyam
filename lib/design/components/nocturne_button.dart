@@ -31,9 +31,9 @@ class NocturneButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = NocturneScope.of(context);
     final (background, foreground, border) = switch (style) {
-      NocturneButtonStyle.signal => (theme.accent, theme.canvas, theme.accent),
-      NocturneButtonStyle.ink => (theme.ink, theme.canvas, theme.ink),
-      NocturneButtonStyle.glass => (theme.glass, theme.ink, theme.lineStrong),
+      NocturneButtonStyle.signal => (theme.accent, theme.canvas, null),
+      NocturneButtonStyle.ink => (theme.ink, theme.canvas, null),
+      NocturneButtonStyle.glass => (theme.glassStrong, theme.ink, theme.line),
       NocturneButtonStyle.danger => (
         theme.missed.withValues(alpha: 0.16),
         theme.missed,
@@ -47,7 +47,19 @@ class NocturneButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: background,
           borderRadius: BorderRadius.circular(NocturneRadius.pill),
-          border: Border.all(color: border),
+          border: border == null ? null : Border.all(color: border, width: 1),
+          boxShadow: style == NocturneButtonStyle.signal
+              ? <BoxShadow>[
+                  BoxShadow(
+                    color: theme.accent.withValues(
+                      alpha: onTap == null ? 0 : 0.28,
+                    ),
+                    blurRadius: 24,
+                    spreadRadius: -4,
+                    offset: const Offset(0, 8),
+                  ),
+                ]
+              : null,
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: NocturneSpace.x5),
@@ -78,6 +90,7 @@ class NocturneButton extends StatelessWidget {
       child: Pressable(
         onTap: onTap,
         semanticLabel: semanticLabel ?? label,
+        scale: 0.975,
         child: expand
             ? SizedBox(width: double.infinity, child: button)
             : button,
@@ -112,6 +125,7 @@ class CircleAction extends StatelessWidget {
       child: Pressable(
         onTap: onTap,
         semanticLabel: semanticLabel,
+        scale: 0.92,
         child: SizedBox.square(
           dimension: NocturneSpace.minTap,
           child: Center(
@@ -119,14 +133,14 @@ class CircleAction extends StatelessWidget {
               dimension: size.clamp(34, NocturneSpace.minTap),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: background ?? theme.glass,
+                  color: background ?? theme.glassStrong,
                   shape: BoxShape.circle,
-                  border: Border.all(color: theme.lineStrong),
+                  border: Border.all(color: theme.line, width: 1),
                 ),
                 child: Center(
                   child: NocturneIcon(
                     glyph,
-                    size: 19,
+                    size: size.clamp(34, NocturneSpace.minTap) * 0.42,
                     color: foreground ?? theme.ink,
                   ),
                 ),

@@ -30,49 +30,67 @@ class GlassCard extends StatelessWidget {
     final glowColor = tint ?? NocturneGradients.glowFor(tone, theme);
     final borderRadius = BorderRadius.circular(radius);
 
-    final card = DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: borderRadius,
-        boxShadow: glow
-            ? <BoxShadow>[
-                BoxShadow(
-                  color: glowColor.withValues(alpha: 0.16),
-                  blurRadius: 48,
-                  spreadRadius: -12,
-                  offset: const Offset(0, 20),
+    final card = ClipRRect(
+      borderRadius: borderRadius,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
+          border: Border.all(color: theme.line, width: 1),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: <Color>[theme.glassStrong, theme.glass],
+          ),
+        ),
+        child: Stack(
+          children: <Widget>[
+            Positioned(
+              left: radius * 0.5,
+              right: radius * 0.5,
+              top: 0,
+              height: 1,
+              child: const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: <Color>[
+                      Color(0x00FFFFFF),
+                      Color(0x66FFFFFF),
+                      Color(0x00FFFFFF),
+                    ],
+                  ),
                 ),
-              ]
-            : null,
-      ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: borderRadius,
-            border: Border.all(color: theme.line),
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: <Color>[theme.glassStrong, theme.glass],
-            ),
-          ),
-          child: Stack(
-            children: <Widget>[
-              Positioned(
-                left: 18,
-                right: 18,
-                top: 0,
-                height: 1,
-                child: ColoredBox(color: theme.lineStrong),
               ),
-              Padding(padding: padding, child: child),
-            ],
-          ),
+            ),
+            Padding(padding: padding, child: child),
+          ],
         ),
       ),
     );
 
-    if (onTap == null) return card;
-    return Pressable(onTap: onTap, semanticLabel: semanticLabel, child: card);
+    Widget surface = card;
+    if (glow) {
+      surface = DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: glowColor.withValues(alpha: 0.16),
+              blurRadius: 48,
+              spreadRadius: -12,
+              offset: const Offset(0, 20),
+            ),
+          ],
+        ),
+        child: surface,
+      );
+    }
+
+    if (onTap == null) return surface;
+    return Pressable(
+      onTap: onTap,
+      semanticLabel: semanticLabel,
+      scale: 0.985,
+      child: surface,
+    );
   }
 }

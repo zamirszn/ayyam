@@ -19,7 +19,7 @@ class RootGate extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final preferences = ref.watch(appPreferencesProvider);
-    if (isAndroidRuntime) {
+    if (isAndroidRuntime || isWebRuntime) {
       ref.listen<AsyncValue<AppPreferences>>(appPreferencesProvider, (
         previous,
         next,

@@ -210,6 +210,9 @@ class _MemoryReminders implements DuaReminderPlatform {
   }
 
   @override
+  Future<bool> showTestNotification() async => true;
+
+  @override
   Future<ReminderDeliveryStatus> requestPermissions() => deliveryStatus();
 }
 

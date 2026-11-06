@@ -68,11 +68,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _testingKey = false;
   bool _saving = false;
   bool _loadingDelivery = false;
+  bool _updatingTheme = false;
+  bool _testingNotification = false;
   bool _backingUp = false;
   bool _deletingAll = false;
   bool _deleteArmed = false;
   bool _restoreArmed = false;
   ReminderDeliveryStatus? _deliveryStatus;
+  String? _deliveryMessage;
   String? _backupMessage;
   String? _backupError;
 
@@ -126,7 +129,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _refreshDeliveryStatus() async {
-    if (!isAndroidRuntime) return;
+    if (!isAndroidRuntime && !isWebRuntime) return;
     setState(() => _loadingDelivery = true);
     try {
       final status = await ref
@@ -144,7 +147,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _requestReminderPermissions() async {
-    setState(() => _loadingDelivery = true);
+    setState(() {
+      _loadingDelivery = true;
+      _deliveryMessage = null;
+    });
     try {
       final status = await ref
           .read(duaReminderPlatformProvider)
@@ -157,6 +163,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _loadingDelivery = false);
+    }
+  }
+
+  Future<void> _sendTestNotification() async {
+    setState(() {
+      _testingNotification = true;
+      _deliveryMessage = null;
+    });
+    try {
+      final platform = ref.read(duaReminderPlatformProvider);
+      final shown = await platform.showTestNotification();
+      final status = await platform.deliveryStatus();
+      if (!mounted) return;
+      setState(() {
+        _deliveryStatus = status;
+        _testingNotification = false;
+        _deliveryMessage = shown
+            ? 'Test sent. Browser reminders run while Ayyam remains open.'
+            : status.supported
+            ? 'Notifications are blocked. Allow them in your browser settings.'
+            : 'This browser does not support notifications.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _testingNotification = false;
+        _deliveryMessage = 'The test notification could not be sent.';
+      });
     }
   }
 
@@ -262,16 +296,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 AppThemeMode.dark => 'Dark',
                               },
                               selected: _themeMode == mode,
-                              onTap: () => setState(() {
-                                _themeMode = mode;
-                                _clearFeedback();
-                              }),
+                              onTap: () => _setThemeMode(mode),
                             ),
                         ],
                       ),
                       const SizedBox(height: NocturneSpace.x2),
                       Text(
-                        'Device follows the appearance selected by your operating system.',
+                        _updatingTheme ? 'Applying appearance…' : 'Appearance changes apply immediately. Device follows your operating system.',
                         style: NocturneType.caption(theme.faint),
                       ),
                       const SizedBox(height: NocturneSpace.x8),
@@ -412,13 +443,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           title: 'Notifications',
                           subtitle: isAndroid
                               ? 'Permission will be requested with the reminder engine.'
-                              : 'Browser delivery is best-effort; in-app content remains available.',
-                          status: isAndroid
-                              ? _deliveryLabel(
+                              : 'Allow browser delivery; reminders run while Ayyam remains open.',
+                          status: _deliveryStatus?.supported == false
+                              ? 'UNAVAILABLE'
+                              : _deliveryLabel(
                                   _deliveryStatus?.notificationsAllowed,
-                                )
-                              : 'BEST EFFORT',
-                          onTap: isAndroidRuntime
+                                ),
+                          onTap: isAndroidRuntime || isWebRuntime
                               ? _requestReminderPermissions
                               : null,
                         ),
@@ -433,7 +464,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ? _deliveryLabel(
                                   _deliveryStatus?.exactAlarmsAllowed,
                                 )
-                              : 'UNAVAILABLE',
+                              : 'BEST EFFORT',
                           onTap: isAndroidRuntime
                               ? _requestReminderPermissions
                               : null,
@@ -450,6 +481,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ? _openBatteryOptimizationSettings
                               : null,
                         ),
+                        if (isAndroidRuntime || isWebRuntime) ...<Widget>[
+                          const SizedBox(height: NocturneSpace.x3),
+                          NocturneButton(
+                            label: _testingNotification
+                                ? 'Sending test…'
+                                : 'Send test notification',
+                            style: NocturneButtonStyle.glass,
+                            compact: true,
+                            onTap: _testingNotification
+                                ? null
+                                : _sendTestNotification,
+                          ),
+                          if (_deliveryMessage != null) ...<Widget>[
+                            const SizedBox(height: NocturneSpace.x2),
+                            Text(
+                              _deliveryMessage!,
+                              style: NocturneType.caption(theme.muted),
+                            ),
+                          ],
+                        ],
                       ],
                       if (_lifeEnabled) ...<Widget>[
                         const SizedBox(height: NocturneSpace.x8),
@@ -490,8 +541,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   ? _deliveryLabel(
                                       _deliveryStatus?.notificationsAllowed,
                                     )
-                                  : 'BEST EFFORT',
-                              onTap: isAndroidRuntime
+                                  : _deliveryLabel(
+                                      _deliveryStatus?.notificationsAllowed,
+                                    ),
+                              onTap: isAndroidRuntime || isWebRuntime
                                   ? _requestReminderPermissions
                                   : null,
                             ),
@@ -676,6 +729,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _clearFeedback() {
     _saveError = null;
     _saveMessage = null;
+  }
+
+  Future<void> _setThemeMode(AppThemeMode mode) async {
+    if (_themeMode == mode || _updatingTheme) return;
+    final previousMode = _themeMode;
+    final previousPreferences = _savedPreferences;
+    final nextPreferences = previousPreferences.copyWith(themeMode: mode);
+    setState(() {
+      _themeMode = mode;
+      _updatingTheme = true;
+      _clearFeedback();
+    });
+    try {
+      await ref
+          .read(appPreferencesProvider.notifier)
+          .updatePreferences(nextPreferences);
+      if (!mounted) return;
+      setState(() {
+        _savedPreferences = nextPreferences;
+        _updatingTheme = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _themeMode = previousMode;
+        _savedPreferences = previousPreferences;
+        _updatingTheme = false;
+        _saveError = 'Could not apply this appearance mode.';
+      });
+    }
   }
 
   void _setFeature({bool? dua, bool? life}) {

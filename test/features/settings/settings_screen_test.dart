@@ -6,6 +6,7 @@ import 'package:ayyam/core/settings/app_preferences.dart';
 import 'package:ayyam/core/settings/app_preferences_controller.dart';
 import 'package:ayyam/core/settings/app_preferences_repository.dart';
 import 'package:ayyam/design/components/nocturne_switch.dart';
+import 'package:ayyam/design/theme/nocturne_theme.dart';
 import 'package:ayyam/features/dua/application/today_dua_controller.dart';
 import 'package:ayyam/features/dua/data/dua_repository.dart';
 import 'package:ayyam/features/dua/domain/dua.dart';
@@ -130,13 +131,14 @@ void main() {
     expect(repository.value.lifeReminderMinute, 0);
   });
 
-  testWidgets('persists an explicit appearance mode', (tester) async {
+  testWidgets('applies and persists appearance immediately', (tester) async {
     final repository = MemoryAppPreferencesRepository(
       AppPreferences.defaults.copyWith(
         onboardingComplete: true,
         duaEnabled: false,
         lifeInDotsEnabled: true,
         dateOfBirth: DateTime(1990, 1, 1),
+        themeMode: AppThemeMode.dark,
       ),
     );
     await _pumpApp(tester, repository, _MemoryApiKeyVault(null));
@@ -144,12 +146,19 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Open settings'));
     await tester.pumpAndSettle();
     expect(find.text('Device'), findsOneWidget);
+    expect(
+      NocturneScope.of(tester.element(find.text('Keep it\nyours.'))).brightness,
+      Brightness.dark,
+    );
 
-    await tester.tap(find.text('Dark'));
-    await tester.tap(find.text('Save changes'));
+    await tester.tap(find.text('Light'));
     await tester.pumpAndSettle();
 
-    expect(repository.value.themeMode, AppThemeMode.dark);
+    expect(repository.value.themeMode, AppThemeMode.light);
+    expect(
+      NocturneScope.of(tester.element(find.text('Keep it\nyours.'))).brightness,
+      Brightness.light,
+    );
   });
 
   testWidgets('requires a second tap before replacing data from a backup', (
